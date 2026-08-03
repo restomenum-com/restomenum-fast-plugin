@@ -1,4 +1,10 @@
-import { verifyAndParseWebhook, type Environment, type WebhookEnvelope } from '@restomenum/plugin-sdk'
+import {
+  verifyAndParseWebhook,
+  type Environment,
+  type EventType,
+  type LifecycleType,
+  type WebhookEnvelope,
+} from '@restomenum/plugin-sdk'
 
 import type { InstallationService } from '@/services/InstallationService'
 import type { EventLogRepository } from '@/repositories/EventLogRepository'
@@ -7,12 +13,24 @@ import { SIGNATURE_TOLERANCE_SEC } from '@/config'
 import { UnauthorizedError, ValidationError } from '@/lib/errors'
 
 /**
- * Kurulum yaşam döngüsü olayları — adlar SDK katalogundan (LIFECYCLE_TYPES) alınmıştır.
- * 🔴 Uydurma ad yazmak sessiz veri sızıntısıdır: olay eşleşmez, tenant verisi hiç silinmez.
+ * İşleyici kaydedilebilen olay adları.
+ *
+ * SDK iki AYRI birleşim verir: iş olayları (`EventType`) ve kurulum yaşam döngüsü
+ * (`LifecycleType`). İkisi de gelir, ikisine de işleyici yazılabilir.
+ *
+ * 🔴 Bu tipin varlık sebebi: uydurma olay adını DERLEME ZAMANINDA yakalamak.
+ * `'plugin.uninstalled'` gibi bir yazım hatası çalışma anında sessizce eşleşmez —
+ * olay hiç işlenmez, tenant verisi silinmez ve hata görünmez.
  */
-const LIFECYCLE_UNINSTALL = 'app.uninstalled'
+export type HandledEventType = EventType | LifecycleType
+
+/**
+ * Kurulum yaşam döngüsü olayları.
+ * Tip bildirimi ZORUNLU — yanlış ad yazılırsa derleyici durdurur.
+ */
+const LIFECYCLE_UNINSTALL: LifecycleType = 'app.uninstalled'
 /** KVKK/GDPR silme talebi — müşteri verisi tutuluyorsa BURADA temizlenmelidir. */
-const LIFECYCLE_REDACT = 'customer.redact'
+const LIFECYCLE_REDACT: LifecycleType = 'customer.redact'
 
 export type EventHandler = (envelope: WebhookEnvelope, ref: TenantRef) => Promise<void>
 
@@ -29,12 +47,13 @@ export interface VerifiedEvent {
 export class WebhookService {
   readonly #installations: InstallationService
   readonly #eventLog: EventLogRepository
-  readonly #handlers: ReadonlyMap<string, EventHandler>
+  readonly #handlers: ReadonlyMap<HandledEventType, EventHandler>
 
   constructor(params: {
     installations: InstallationService
     eventLog: EventLogRepository
-    handlers?: ReadonlyMap<string, EventHandler>
+    /** Olay adları tip düzeyinde kısıtlıdır — yazım hatası derlenmez. */
+    handlers?: ReadonlyMap<HandledEventType, EventHandler>
   }) {
     this.#installations = params.installations
     this.#eventLog = params.eventLog
@@ -122,7 +141,9 @@ export class WebhookService {
       return
     }
 
-    const handler = this.#handlers.get(envelope.type)
+    // `envelope.type` ağdan gelen bir string; aramada daraltma yapılır. Tip güvenliği
+    // KAYIT tarafında sağlanır — kimse tanınmayan bir ada işleyici bağlayamaz.
+    const handler = this.#handlers.get(envelope.type as HandledEventType)
     if (handler === undefined) {
       console.log(`webhook: işleyicisiz olay type=${envelope.type} env=${ref.environment}`)
       return

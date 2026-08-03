@@ -1,0 +1,32 @@
+# Kalite kapısı. Cloudflare Workers Builds yalnız main'i derleyip yayınlar;
+# bu iş akışı PR'ları da kontrol eder — kırık kod main'e girmeden yakalanır.
+# CLAUDE.md §3: "main her zaman deploy edilebilir olmalı."
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` — lockfile'daki sürümleri birebir kurar. `npm install` kullanılmaz:
+      # sürümleri yeniden çözerse CI, yerelde doğrulanan yapılandırmayı sınamaz.
+      - run: npm ci
+
+      - name: typecheck · lint · test
+        run: npm run check
+
+      # Derleme ayrıca koşar: tip ve testler geçse de Worker paketlemesi kırılabilir
+      # (OpenNext adaptörü, standalone çıktı, wrangler yapılandırması).
+      - name: build
+        run: npm run build

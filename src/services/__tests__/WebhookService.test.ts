@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { signPayload, type WebhookEnvelope } from '@restomenum/plugin-sdk'
 
-import { WebhookService, type EventHandler } from '@/services/WebhookService'
+import {
+  WebhookService,
+  type EventHandler,
+  type HandledEventType,
+} from '@/services/WebhookService'
 import type { InstallationService } from '@/services/InstallationService'
 import type { EventLogRepository } from '@/repositories/EventLogRepository'
 import type { TenantRef } from '@/models/TenantRef'
@@ -31,7 +35,7 @@ function envelopeBody(overrides: Partial<WebhookEnvelope> = {}): string {
 function buildService(params: {
   secret?: string | undefined
   markSeen?: EventLogRepository['markSeen']
-  handlers?: ReadonlyMap<string, EventHandler>
+  handlers?: ReadonlyMap<HandledEventType, EventHandler>
 }) {
   const removeInstall = vi.fn(async () => {})
   const installations = {

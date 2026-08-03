@@ -88,7 +88,14 @@ npm run dev        # Next.js geliştirme sunucusu
 npm run preview    # Worker paketi + wrangler dev (gerçek runtime)
 npm run check      # typecheck + lint + test — commit'ten önce ZORUNLU
 npm run build      # next build + Worker paketi
+
+npm run dev:seed   # yerel D1'e sahte kurulum yaz (handler geliştirmek için)
+npm run smoke -- <url>   # deploy sonrası duman testi
 ```
+
+`dev:seed` olmadan hiçbir imzalı istek doğrulanamaz — imza doğrulaması tenant'ın
+`webhookSecret`'ini veritabanından çözüyor. Gerçek bir mağazaya kurulum yapmadan
+çalışabilmek için bu fixture gerekir.
 
 **Yerel webhook testi** için genel bir adrese ihtiyacın var:
 
@@ -114,6 +121,9 @@ buildContainer({
 
 `EventHandler` imzası: `(envelope, ref) => Promise<void>` — `ref` ortam + tenant taşır,
 Callback API çağrısı için `installations.apiKeyFor(ref)` kullanılır.
+
+Map'in anahtarı `HandledEventType` (SDK'nın `EventType | LifecycleType` birleşimi) —
+**yazım hatası derlenmez**, derleyici doğrusunu önerir.
 
 Olay tipleri, payload şekilleri ve örnek kullanım için:
 [**sample-plugin**](https://github.com/restomenum-com/plugin-sdk/tree/main/examples/sample-plugin) ·

@@ -3,7 +3,11 @@ import { RestomenumAdapter } from '@/adapters/RestomenumAdapter'
 import { InstallationService } from '@/services/InstallationService'
 import { SessionService } from '@/services/SessionService'
 import { SignedRequestService } from '@/services/SignedRequestService'
-import { WebhookService, type EventHandler } from '@/services/WebhookService'
+import {
+  WebhookService,
+  type EventHandler,
+  type HandledEventType,
+} from '@/services/WebhookService'
 import { MaintenanceService } from '@/services/MaintenanceService'
 import type { InstallationRepository } from '@/repositories/InstallationRepository'
 import type { EventLogRepository } from '@/repositories/EventLogRepository'
@@ -40,7 +44,7 @@ export interface ContainerOverrides {
   eventQueue?: EventQueue
   installationRepository?: InstallationRepository
   eventLogRepository?: EventLogRepository
-  eventHandlers?: ReadonlyMap<string, EventHandler>
+  eventHandlers?: ReadonlyMap<HandledEventType, EventHandler>
 }
 
 /** Veri katmanı D1'dir (§6). Testler `overrides` ile sahte repository enjekte eder. */
