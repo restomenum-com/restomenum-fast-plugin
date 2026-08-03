@@ -1,7 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // 🔴 Bu ad workers.dev alt alan adını belirler ve `package.json` name ile AYNI olmalıdır.
-  // `/setup` kurulum röportajı ikisini birlikte değiştirir; elle tek tarafı değiştirme.
+  // 🔴 YER TUTUCU — bu şablondan yeni bir eklenti türetirken DEĞİŞTİRİLİR.
+  // Bu ad workers.dev alt alan adını belirler ve `package.json` name ile AYNI olmalıdır;
+  // `/setup` kurulum röportajı ikisini birlikte günceller, elle tek tarafı değiştirme.
   "name": "restomenum-plugin",
   // OpenNext'in ürettiği worker YALNIZ fetch içerir; scheduled ve queue handler'ları
   // için onu saran kendi girişimizi kullanırız (worker/index.ts).
@@ -76,7 +77,7 @@
   ,"d1_databases": [
     {
       "binding": "DB",
-      "database_name": "restomenum-plugin",
+      "database_name": "restomenum-plugin",  // yer tutucu — kurulumda değişir
       "database_id": "local-dev",
       "migrations_dir": "drizzle"
     }
