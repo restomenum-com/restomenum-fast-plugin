@@ -25,6 +25,7 @@ sınıfıdır**. Her sorgu, her cache anahtarı ve her log satırı tenant ile s
 | Doğrulama | **zod** |
 | Dosya/görsel | **Cloudflare R2** (dosya) + **Cloudflare Images** (görsel) |
 | Restomenum | **`@restomenum/plugin-sdk`** |
+| Arayüz | **Tailwind CSS** + `next/font` (§2.8) |
 | Test | **Vitest** |
 
 ## 2. Genel mühendislik kuralları
@@ -109,6 +110,25 @@ sınıfıdır**. Her sorgu, her cache anahtarı ve her log satırı tenant ile s
 - Gerçek tetik gerçek aksiyon istiyorsa (ödeme, iptal, kaldırma) → **kullanıcıdan iste.**
 - 🔴 Denenmemiş kısmı **dürüstçe söyle**: *"kod bağlı ama gerçek tetikle denenmedi"*.
 
+### 2.8 Arayüz ve tasarım
+- **Tailwind CSS zorunlu.** Inline `style` ve ayrı `.css` dosyası yazılmaz; istisna, Tailwind'in
+  ifade edemediği tek seferlik değerlerdir (o da CSS değişkeniyle).
+- **Renk/ölçü değerleri sınıflara dağıtılmaz** — `globals.css` içindeki `@theme` bloğunda
+  belirteç olarak tanımlanır (`--color-brand-*`, `--radius-panel`). Magic değer yasağı (§2.1) burada da geçerli.
+- **Açık ve koyu tema İKİSİ birden desteklenir.** Panel eklentiyi her iki temada çerçeveleyebilir;
+  yalnız birine göre tasarlanan ekran diğerinde okunmaz hale gelir.
+- **2026 modern estetiği:** cömert boşluk, net tipografik hiyerarşi, yumuşak derinlik
+  (`backdrop-blur`, düşük opaklıkta kenarlık), `text-balance`/`text-pretty`, `tabular-nums`,
+  ölçü birimi olarak `dvh`. Dekoratif hareket ve gradyan **az** kullanılır — arayüz sakin durur.
+- **Erişilebilirlik pazarlık konusu değil:** yeterli kontrast, `aria-*` ve rol'ler, klavyeyle
+  gezilebilirlik, `prefers-reduced-motion` desteği (globals.css'te tanımlı).
+- 🔴 **Dış kaynak YÜKLENMEZ** — CDN script'i, uzak font, uzak görsel yok. Yazı tipleri `next/font`
+  ile derleme anında indirilip kendi origin'imizden sunulur; aksi halde iframe'de CSP'ye takılır
+  ve her istekte Worker alt-istek bütçesi harcanır.
+- **Yükleniyor/boş/hata durumları tasarlanır**, sonradan eklenmez. Ham hata metni kullanıcıya
+  gösterilmez; ne olduğu ve ne yapılacağı yazılır.
+- iframe sayfaları panel dışında da açılabilir — o durumda hata değil, **açıklama** gösterilir
+  (`isEmbedded()`).
 ---
 
 ## 3. Git ve deploy akışı
@@ -317,7 +337,8 @@ commit'ten **ÖNCE** [`standards-reviewer`](.claude/agents/standards-reviewer.md
 - **Örnek eklenti (referans uygulama):**
   https://github.com/restomenum-com/plugin-sdk/tree/main/examples/sample-plugin
 - **Kritik sayfalar:** `/docs/iframe-security` · `/docs/session-token` · `/docs/webhook-signature` ·
-  `/docs/limits` · `/docs/go-live` · `/docs/monetization`
+  `/docs/gate-iframe` (App Bridge tel protokolü buradadır) · `/docs/limits` · `/docs/go-live` ·
+  `/docs/monetization`
 - **Diğer:** `/docs/quickstart` · `/docs/sdk` · `/docs/concepts` · `/docs/manifest` ·
   `/docs/lifecycle` · `/docs/events` · `/docs/api-reference` · `/docs/dev-stores` ·
   `/docs/versioning` · `/docs/changelog`
