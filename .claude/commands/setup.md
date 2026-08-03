@@ -159,6 +159,30 @@ Tek geçişte, sırayla:
    🔴 `submit_version` ÇAĞIRMA — kalıcı durum geçişidir, kullanıcı açıkça istemeden yapılmaz.
    Ayrıca manifest geçici bir tünel adresine bakıyorsa incelemeye gönderilmemelidir.
 
+9. **Şablon bağlantısını çöz** — bu depo artık kullanıcının eklentisi, şablon değil.
+
+   `origin` şablonun deposunu gösteriyor; bırakılırsa ilk `git push` kullanıcının
+   eklentisini ŞABLONA göndermeye çalışır.
+
+   ```bash
+   git remote -v                                    # önce ne olduğunu gör
+   git remote rename origin template 2>/dev/null    # varsa: şablon bağlantısını sakla
+   ```
+
+   `origin` yerine `template` yapılır, silinmez — böylece kullanıcı ileride şablon
+   güncellemelerini çekebilir (`git fetch template`). `origin` adı kendi deposu için boşalır.
+   Uzak bağlantı zaten yoksa (zip indirilmişse) bu adımı sessizce atla.
+
+   Kullanıcıya söyle:
+   ```
+   Kendi deponu oluşturduktan sonra:
+     git remote add origin <senin-repo-url>
+     git push -u origin main
+   ```
+
+   🔴 Deponun kendisini SİLME, geçmişi SIFIRLAMA. Şablon geçmişi kullanıcının kendi
+   commit'lerinin altında kalır ve zararsızdır; silmek geri alınamaz bir işlemdir.
+
 ## 4. Doğrula ve raporla
 
 `npm run check` çalıştır. Kırmızıysa **düzelt**, "tamam" deme.
@@ -169,7 +193,8 @@ Sonra kullanıcıya şunları söyle:
   `npm run dev`, deploy için Workers Builds'i bağla
 - **Henüz gerçek tetikle denenmemiş olanlar** — dürüstçe (CLAUDE.md §2.7)
 
-Son olarak değişiklikleri commit et (§3 pathspec kuralı) — ama **push etme**, o ayrı onay ister.
+Son olarak değişiklikleri commit et (§3 pathspec kuralı) — ama **push etme**: `origin`
+artık tanımlı değil ve hedef depo kullanıcının kararı.
 
 ## `PROJECT.md` şablonu
 
