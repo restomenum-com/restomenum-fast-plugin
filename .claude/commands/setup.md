@@ -95,10 +95,24 @@ kod bırakılmaz (CLAUDE.md §2.3).
 **g) Portal kaydı** (`AskUserQuestion`)
 > Eklentiyi portalda şimdi oluşturayım mı, yoksa mevcut bir kaydın var mı?
 
-- **Oluştur** → MCP `create_plugin` + `generate_client_secret`.
+- **Oluştur** → `create_plugin` (ad, slug, açıklama, kategori) → `generate_client_secret`.
   🔴 `client_secret` YALNIZ BİR KEZ gösterilir; anında `.dev.vars`'a yaz ve kullanıcıyı uyar.
-- **Mevcut** → `pluginId` ve `client_secret`'ı kullanıcıdan iste. Bunları **asla** koda,
-  `wrangler.jsonc` dışına ya da log'a yazma.
+  Yenilemek saatte en çok 5 kez mümkündür.
+- **Mevcut** → `list_plugins` ile göster, seçtir; `client_secret`'ı kullanıcıdan iste.
+  Secret'ı **asla** koda, `PROJECT.md`'ye ya da log'a yazma.
+- **Şimdi olmasın** → atla; `PROJECT.md`'ye "portal kaydı yapılmadı" yaz.
+
+**h) Yayın adresi** (`AskUserQuestion`) — sürüm oluşturmak için ZORUNLU
+
+`create_version` `webhook_url` ve `connect_url` ister; ikisi **https** ve **aynı domain**
+olmalı. Adres bilinmeden sürüm oluşturulamaz, dolayısıyla manifest de yazılamaz.
+
+- **Deploy adresim var** → kullanıcıdan al (ör. `https://<worker>.workers.dev`).
+- **Yerel tünel kullanacağım** → `cloudflared tunnel --url http://localhost:8787` çıktısındaki
+  adresi kullan. Geçicidir; tünel kapanınca manifest ölü adrese bakar, bunu söyle.
+- **Henüz yok** → sürüm ve manifest adımlarını ATLA. Kullanıcıya deploy sonrası
+  `/setup`'ı yeniden çalıştırabileceğini ya da manifest'i elle yazabileceğini söyle.
+  `PROJECT.md`'ye "sürüm oluşturulmadı — yayın adresi bekleniyor" yaz.
 
 ## 3. Cevapları uygula
 
@@ -121,10 +135,29 @@ Tek geçişte, sırayla:
 6. **Arayüz istenmediyse** — `src/app/settings/`, `src/lib/appBridge.ts`, `next.config.ts`
    içindeki CSP başlığı ve ilgili testler kaldırılır.
 7. **`PROJECT.md`** oluşturulur (aşağıdaki şablon).
-8. **Portal manifest'i** — kullanıcı istiyorsa MCP ile: `set_events`, `set_pages`,
-   `set_action_url`, `set_pricing`, ardından `validate_version`.
+8. **Portal manifest'i** — yayın adresi varsa, BU SIRAYLA (her `set_*` aracı `version_id`
+   ister, o yüzden sürüm önce gelir):
+
+   1. `create_version` — semver (`1.0.0`), `webhook_url` = `<adres>/api/webhook`,
+      `connect_url` = `<adres>/api/connect`
+   2. `set_events` — (d) adımında seçilenler. Gerekli read-scope'lar ve `events:subscribe`
+      **otomatik türetilir**, elle eklenmez.
+   3. `set_scopes` — YALNIZ olaylardan/sayfalardan türemeyen ekstra izinler için
+      (ör. `orders:write`, `customers:read`, `purchases:write`). Hiçbiri gerekmiyorsa ÇAĞIRMA;
+      liste verirsen mevcut listenin yerine geçer. Hook scope'ları elle verilemez.
+   4. `set_pages` — arayüz seçildiyse: `{ id: "settings", path: "/settings" }`.
+      `ui:page` otomatik eklenir.
+   5. `set_settings_page` — sayfayı "Kur/Ayarlar" ekranı olarak işaretler.
+   6. `set_action_url` — `"/api/action"` (webhook origin'ine eklenir).
+   7. `set_pricing` — (f) adımındaki seçim. ⚠️ Bu araç `plugin_id` alır, `version_id` DEĞİL.
+      `free` seçilirse `confirm_cancel_subscriptions` gerekir; yeni eklentide abonelik
+      olmadığı için güvenli, ama kullanıcıya söyle.
+   8. `validate_version` — hiçbir şeyin sessizce düşmediğini teyit et. Kaydetme sırasında
+      whitelist dışı öğeler SESSİZCE atılır; bu adım atlanamaz.
+   9. `get_manifest` — sonucu kullanıcıya özetle.
+
    🔴 `submit_version` ÇAĞIRMA — kalıcı durum geçişidir, kullanıcı açıkça istemeden yapılmaz.
-   Webhook/connect URL'leri gerçek deploy adresi belli olmadan yazılamaz; bunu söyle.
+   Ayrıca manifest geçici bir tünel adresine bakıyorsa incelemeye gönderilmemelidir.
 
 ## 4. Doğrula ve raporla
 
