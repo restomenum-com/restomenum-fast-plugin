@@ -30,16 +30,16 @@ const ENVIRONMENT_PARAMS = ['environment', 'env', 'mode'] as const
 /**
  * Connect çağrısındaki ortamı çözer.
  *
- * Connect bir tarayıcı yönlendirmesidir; imzalı gövde YOKTUR. Ortam bir sorgu
- * parametresiyle geliyorsa o kullanılır; gelmiyorsa deployment varsayılanına düşülür
- * ve bu durum log'lanır — sessizce yanlış ortama yazmamak için.
+ * 🔴 Varsayılan YOKTUR. Ortam bilinmeden kurulum yazılamaz: yanlış ortam anahtarına
+ * yazılan credential sessizce ölü kalır — kurulum başarılı görünür ama sonraki her
+ * webhook `(doğru ortam, tenant)` arayıp bulamaz ve 401 döner. Fail-closed.
  */
-function resolveEnvironment(url: URL, fallback: Environment): Environment {
+function resolveEnvironment(url: URL): Environment | undefined {
   for (const name of ENVIRONMENT_PARAMS) {
     const value = url.searchParams.get(name)
     if (value === 'sandbox' || value === 'production') return value
   }
-  return fallback
+  return undefined
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -82,11 +82,13 @@ export async function GET(request: Request): Promise<Response> {
       console.log(`${LOG_PREFIX} platform kaynaklı state — doğrulama code takasında yapılır`)
     }
 
-    const environment = resolveEnvironment(url, container.config.environment)
-    const fromParam = ENVIRONMENT_PARAMS.some((name) => url.searchParams.has(name))
-    console.log(
-      `${LOG_PREFIX} ortam=${environment} (${fromParam ? 'parametreden' : 'VARSAYILAN — parametre gelmedi'})`,
-    )
+    const environment = resolveEnvironment(url)
+    if (environment === undefined) {
+      throw new ValidationError(
+        'Connect çağrısında ortam bilgisi yok (environment). Kurulum yazılamaz.',
+      )
+    }
+    console.log(`${LOG_PREFIX} ortam=${environment}`)
 
     const installation = await container.installations.completeInstall(code, environment)
     console.log(

@@ -61,9 +61,11 @@
 
   // Secret DEĞİL, yalnız hassas olmayan ayarlar buraya yazılır.
   // RESTOMENUM_PLUGIN_ID portaldan alınır ve BURAYA yazılır (gizli değil).
+  // 🔴 Ortam (sandbox/production) BURADA TANIMLANMAZ. Her imzalı gövde, connect
+  // parametresi ve session token claim'i ortamı kendisi taşır; eklenti isteğe göre
+  // cevap verir. Statik bir varsayılan, eksik alanda sessizce YANLIŞ ortama yazardı.
   "vars": {
-    "RESTOMENUM_PLUGIN_ID": "",
-    "RESTOMENUM_ENVIRONMENT": "sandbox"
+    "RESTOMENUM_PLUGIN_ID": ""
   }
 
   // Secret'lar repoya girmez, `wrangler secret put <AD>` ile yüklenir (yerelde .dev.vars):

@@ -161,3 +161,30 @@ describe('session token — ortam claim\'i', () => {
     expect((await handleSessionMe(sessionRequest(token), container)).status).toBe(401)
   })
 })
+
+describe('ortam eksikse — fail-closed', () => {
+  it('🔴 `environment` alanı OLMAYAN webhook reddedilir (varsayılana düşmez)', async () => {
+    // Statik bir varsayılan olsaydı bu istek sessizce o ortama yazılır ve
+    // sonraki tüm teslimler yanlış anahtarda arandığı için 401 olurdu.
+    const body = webhookBody({ tenantId: TENANT_A })
+    delete (body as Record<string, unknown>)['environment']
+
+    const request = signedRequest('https://x/api/webhook', body, SECRET_A)
+    expect((await handleWebhook(request, container)).status).toBe(400)
+  })
+
+  it('🔴 `environment` alanı OLMAYAN action reddedilir', async () => {
+    const body = { id: 'act-1', hook: 'send', tenantId: TENANT_A }
+    const request = signedRequest('https://x/api/action', body, SECRET_A)
+    expect((await handleAction(request, container)).status).toBe(400)
+  })
+
+  it('🔴 `environment` claim\'i OLMAYAN session token reddedilir', async () => {
+    const withoutEnv = await makeSessionToken({
+      secret: SECRET_A,
+      tenantId: TENANT_A,
+      environment: '',
+    })
+    expect((await handleSessionMe(sessionRequest(withoutEnv), container)).status).toBe(401)
+  })
+})

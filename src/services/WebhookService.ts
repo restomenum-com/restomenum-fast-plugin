@@ -30,18 +30,14 @@ export class WebhookService {
   readonly #installations: InstallationService
   readonly #eventLog: EventLogRepository
   readonly #handlers: ReadonlyMap<string, EventHandler>
-  readonly #fallbackEnvironment: Environment
 
   constructor(params: {
     installations: InstallationService
     eventLog: EventLogRepository
-    /** Zarfta `environment` yoksa (rollout öncesi kuyruklanmış gövde) kullanılır. */
-    fallbackEnvironment: Environment
     handlers?: ReadonlyMap<string, EventHandler>
   }) {
     this.#installations = params.installations
     this.#eventLog = params.eventLog
-    this.#fallbackEnvironment = params.fallbackEnvironment
     this.#handlers = params.handlers ?? new Map()
   }
 
@@ -60,7 +56,13 @@ export class WebhookService {
       throw new ValidationError('Gövde geçerli JSON değil.')
     }
 
-    const environment = readEnvironment(unverified) ?? this.#fallbackEnvironment
+    // 🔴 Ortam İSTEKTEN okunur, yapılandırmadan DEĞİL. Eksikse tahmin edilmez:
+    // yanlış ortam varsayımı credential'ı yanlış anahtara yazar ve sonraki tüm
+    // teslimler sessizce 401 olur. Fail-closed.
+    const environment = readEnvironment(unverified)
+    if (environment === undefined) {
+      throw new ValidationError('Gövdede `environment` alanı yok.')
+    }
     let ref: TenantRef | undefined
     let installationFound = false
 

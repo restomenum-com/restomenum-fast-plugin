@@ -110,7 +110,7 @@ describe('webhook — imza doğrulaması', () => {
 
 describe('action / hook — imza ve şema', () => {
   const actionBody = { id: 'act-1', hook: 'send', tenantId: TENANT_A, environment: 'sandbox' }
-  const gateBody = { type: 'hook', event: 'table.close', tenantId: TENANT_A }
+  const gateBody = { type: 'hook', event: 'table.close', tenantId: TENANT_A, environment: 'sandbox' }
 
   it('geçerli action imzası kabul edilir', async () => {
     const request = signedRequest('https://x/api/action', actionBody, SECRET_A)

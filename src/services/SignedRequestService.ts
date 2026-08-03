@@ -1,4 +1,4 @@
-import { verifyWebhookSignature, type Environment } from '@restomenum/plugin-sdk'
+import { verifyWebhookSignature } from '@restomenum/plugin-sdk'
 import type { ZodType } from 'zod'
 
 import type { InstallationService } from '@/services/InstallationService'
@@ -31,11 +31,8 @@ function readTenantId(body: unknown): string {
 
 export class SignedRequestService {
   readonly #installations: InstallationService
-  readonly #fallbackEnvironment: Environment
-
-  constructor(params: { installations: InstallationService; fallbackEnvironment: Environment }) {
+  constructor(params: { installations: InstallationService }) {
     this.#installations = params.installations
-    this.#fallbackEnvironment = params.fallbackEnvironment
   }
 
   /**
@@ -58,10 +55,12 @@ export class SignedRequestService {
       throw new ValidationError('Gövde geçerli JSON değil.')
     }
 
-    const ref: TenantRef = {
-      environment: readEnvironment(unverified) ?? this.#fallbackEnvironment,
-      tenantId: readTenantId(unverified),
+    // Ortam istekten okunur; eksikse tahmin edilmez (fail-closed).
+    const environment = readEnvironment(unverified)
+    if (environment === undefined) {
+      throw new ValidationError('Gövdede `environment` alanı yok.')
     }
+    const ref: TenantRef = { environment, tenantId: readTenantId(unverified) }
 
     const secret = await this.#installations.webhookSecretFor(ref)
     if (secret === undefined) {

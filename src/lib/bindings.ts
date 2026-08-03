@@ -8,7 +8,6 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 export interface Bindings {
   /** wrangler.jsonc `vars` */
   readonly RESTOMENUM_PLUGIN_ID?: string
-  readonly RESTOMENUM_ENVIRONMENT?: string
   /** `wrangler secret put` ile verilir */
   readonly RESTOMENUM_CLIENT_SECRET?: string
   readonly SECRET_ENCRYPTION_KEY?: string

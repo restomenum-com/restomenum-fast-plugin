@@ -19,6 +19,7 @@ function envelopeBody(overrides: Partial<WebhookEnvelope> = {}): string {
     id: 'evt-1',
     type: 'table.created',
     version: '1',
+    environment: 'sandbox',
     tenantId: TENANT_ID,
     occurredAt: Date.now(),
     data: {},
@@ -51,7 +52,6 @@ function buildService(params: {
     service: new WebhookService({
       installations,
       eventLog,
-      fallbackEnvironment: 'sandbox',
       ...(params.handlers !== undefined ? { handlers: params.handlers } : {}),
     }),
   }
@@ -110,6 +110,7 @@ describe('WebhookService.process', () => {
     id: 'evt-1',
     type: 'table.created',
     version: '1',
+    environment: 'sandbox',
     tenantId: TENANT_ID,
     occurredAt: Date.now(),
     data: {},

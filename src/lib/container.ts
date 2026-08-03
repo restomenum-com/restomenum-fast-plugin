@@ -72,7 +72,6 @@ export function buildContainer(overrides: ContainerOverrides = {}): Container {
   const webhooks = new WebhookService({
     installations,
     eventLog: eventLogRepository,
-    fallbackEnvironment: config.environment,
     ...(overrides.eventHandlers !== undefined ? { handlers: overrides.eventHandlers } : {}),
   })
 
@@ -94,11 +93,9 @@ export function buildContainer(overrides: ContainerOverrides = {}): Container {
     sessions: new SessionService({
       installations,
       pluginId: config.pluginId,
-      fallbackEnvironment: config.environment,
     }),
     signedRequests: new SignedRequestService({
       installations,
-      fallbackEnvironment: config.environment,
     }),
     maintenance: new MaintenanceService({ eventLog: eventLogRepository }),
     webhooks,

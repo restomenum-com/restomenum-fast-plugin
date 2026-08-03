@@ -94,21 +94,18 @@ export async function buildTestContainer(): Promise<Container> {
     config: {
       pluginId: PLUGIN_ID,
       clientSecret: 'bu-testlerde-kullanilmiyor',
-      environment: 'sandbox',
       encryptionKey: ENCRYPTION_KEY,
     },
     installations,
     sessions: new SessionService({
       installations,
       pluginId: PLUGIN_ID,
-      fallbackEnvironment: 'sandbox',
     }),
-    signedRequests: new SignedRequestService({ installations, fallbackEnvironment: 'sandbox' }),
+    signedRequests: new SignedRequestService({ installations }),
     maintenance: new MaintenanceService({ eventLog: new MemoryEventLogRepository() }),
     webhooks: new WebhookService({
       installations,
       eventLog: new MemoryEventLogRepository(),
-      fallbackEnvironment: 'sandbox',
     }),
   }
 }

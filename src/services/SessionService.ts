@@ -46,17 +46,12 @@ function peekEnvironment(authorizationHeader: string | null): Environment | unde
 export class SessionService {
   readonly #installations: InstallationService
   readonly #pluginId: string
-  readonly #fallbackEnvironment: Environment
-
   constructor(params: {
     installations: InstallationService
     pluginId: string
-    /** Token'da `environment` claim'i yoksa (eski panel sürümü) kullanılır. */
-    fallbackEnvironment: Environment
   }) {
     this.#installations = params.installations
     this.#pluginId = params.pluginId
-    this.#fallbackEnvironment = params.fallbackEnvironment
   }
 
   /**
@@ -64,7 +59,11 @@ export class SessionService {
    * Bundan sonra `tenantId`, `role` ve `environment` YALNIZ doğrulanmış claim'lerden okunur.
    */
   async authenticate(authorizationHeader: string | null): Promise<Session> {
-    const environment = peekEnvironment(authorizationHeader) ?? this.#fallbackEnvironment
+    // Ortam token claim'inden okunur; eksikse tahmin edilmez (fail-closed).
+    const environment = peekEnvironment(authorizationHeader)
+    if (environment === undefined) {
+      throw new UnauthorizedError('Oturum belirteci geçersiz.')
+    }
     let ref: TenantRef | undefined
 
     try {

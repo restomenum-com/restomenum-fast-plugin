@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { PANEL_ORIGINS, SIGNATURE_TOLERANCE_SEC } from '@restomenum/plugin-sdk'
-import type { Environment } from '@restomenum/plugin-sdk'
 
 import { ConfigError } from '@/lib/errors'
 import type { Bindings } from '@/lib/bindings'
@@ -24,13 +23,11 @@ const configSchema = z.object({
   pluginId: z.string().min(1, 'RESTOMENUM_PLUGIN_ID tanımlı değil'),
   /** Yalnız server-to-server token değişiminde kullanılır — istemciye asla gitmez. */
   clientSecret: z.string().min(1, 'RESTOMENUM_CLIENT_SECRET tanımlı değil'),
-  /** Callback/OAuth API kökünü belirler. */
-  environment: z.enum(['sandbox', 'production']),
   /** Install credential'larını at-rest şifrelemek için base64 kodlu 32 baytlık anahtar. */
   encryptionKey: z.string().min(1, 'SECRET_ENCRYPTION_KEY tanımlı değil'),
 })
 
-export type AppConfig = z.infer<typeof configSchema> & { environment: Environment }
+export type AppConfig = z.infer<typeof configSchema>
 
 /**
  * Binding'lerden config üretir ve doğrular.
@@ -40,7 +37,6 @@ export function loadConfig(bindings: Bindings): AppConfig {
   const result = configSchema.safeParse({
     pluginId: bindings.RESTOMENUM_PLUGIN_ID,
     clientSecret: bindings.RESTOMENUM_CLIENT_SECRET,
-    environment: bindings.RESTOMENUM_ENVIRONMENT ?? 'sandbox',
     encryptionKey: bindings.SECRET_ENCRYPTION_KEY,
   })
 
