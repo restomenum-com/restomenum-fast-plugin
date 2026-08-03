@@ -153,6 +153,9 @@ sınıfıdır**. Her sorgu, her cache anahtarı ve her log satırı tenant ile s
 - 🔴 **Secret ASLA commit edilmez** (`.env`, `.dev.vars`, anahtar/şifre). Prod secret'ları
   `wrangler secret put` ile. Stage'lenmiş secret görülürse: **commit iptal + rotasyon**.
 - **`git push`, tag, release, `reset --hard`, `push --force` → kullanıcı istemeden yapılmaz.**
+- **`package-lock.json` COMMIT EDİLİR, elle düzenlenmez.** Onsuz her CI derlemesi paketleri
+  yeniden çözer (tekrarlanabilirlik gider) ve integrity hash'leri kaybolur (tedarik zinciri riski).
+  Güncelleme `npm update` ile yapılır, çıkan lockfile commit'lenir.
 - Yeni bağımlılıkta **workerd uyumluluğu ön koşuldur**; mevcut paket işi görüyorsa yenisi eklenmez.
 
 ---
