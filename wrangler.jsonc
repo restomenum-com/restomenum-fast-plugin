@@ -1,0 +1,51 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "restomenum-plugin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-01",
+
+  // nodejs_compat ZORUNLU — @restomenum/plugin-sdk `node:crypto` kullanıyor.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // DEPLOY: elle YAPILMAZ. GitHub'a push → Cloudflare Workers Builds derler ve yayınlar.
+  // `wrangler deploy` yerelden çalıştırılmaz (CLAUDE.md §3).
+  //
+  // Workers Builds ayarları (Cloudflare panelinden bir kez yapılır):
+  //   Build command   : npm run build:worker
+  //   Deploy command   : npx wrangler deploy
+  //   Root directory   : /
+  //   Node sürümü      : 22
+  //
+  // Yerel doğrulama serbest:  npm run preview  ·  npx wrangler deploy --dry-run
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Secret DEĞİL, yalnız hassas olmayan ayarlar buraya yazılır.
+  // RESTOMENUM_PLUGIN_ID portaldan alınır ve BURAYA yazılır (gizli değil).
+  "vars": {
+    "RESTOMENUM_PLUGIN_ID": "",
+    "RESTOMENUM_ENVIRONMENT": "sandbox"
+  }
+
+  // Secret'lar repoya girmez, `wrangler secret put <AD>` ile yüklenir (yerelde .dev.vars):
+  //   RESTOMENUM_CLIENT_SECRET  — portaldan alınan cs_...
+  //   SECRET_ENCRYPTION_KEY     — base64 32 bayt:  openssl rand -base64 32
+  // ⚠️ Bunlar BUILD değil RUNTIME secret'ıdır — Workers Builds ortam değişkeni olarak
+  //    değil, Worker secret'ı olarak tanımlanmalı; yoksa uygulama açılışta 503 döner.
+
+  // Veritabanı seçilince birini ekle (CLAUDE.md §6 — biri seçilir, ikisi birden değil):
+  //
+  // D1:
+  // "d1_databases": [{ "binding": "DB", "database_name": "plugin", "database_id": "..." }]
+  //
+  // Neon: DATABASE_URL secret olarak verilir, binding gerekmez.
+}

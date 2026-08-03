@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────
+# Git'e GİDER (bilinçli olarak ignore EDİLMEZ):
+#   CLAUDE.md          → proje kuralları
+#   .claude/           → agent, hook ve ayarlar (ekip bunları paylaşır)
+#   drizzle/           → migration'lar, şema geçmişi repoda yaşar
+#   package-lock.json  → sürüm kilidi
+# Aşağıya bunları kapsayacak geniş bir kural EKLEME.
+# ─────────────────────────────────────────────────────────────
+
+# Bağımlılıklar
+node_modules/
+.pnp
+.pnp.*
+
+# Build çıktıları
+.next/
+.open-next/
+out/
+build/
+dist/
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Ortam değişkenleri ve secret'lar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Test / coverage
+coverage/
+*.lcov
+
+# TypeScript ve araç önbellekleri
+*.tsbuildinfo
+next-env.d.ts
+.eslintcache
+.turbo/
+
+# Log
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / editör
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Güvenlik ağı: yukarıdaki kurallardan biri genişletilirse bunlar yine de takip edilir
+!CLAUDE.md
+!.claude/
+!.claude/**
