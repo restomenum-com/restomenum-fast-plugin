@@ -1,14 +1,26 @@
-import { verifyAndParseWebhook, type WebhookEnvelope } from '@restomenum/plugin-sdk'
+import { verifyAndParseWebhook, type Environment, type WebhookEnvelope } from '@restomenum/plugin-sdk'
 
 import type { InstallationService } from '@/services/InstallationService'
 import type { EventLogRepository } from '@/repositories/EventLogRepository'
+import type { TenantRef } from '@/models/TenantRef'
 import { SIGNATURE_TOLERANCE_SEC } from '@/config'
-import { UnauthorizedError } from '@/lib/errors'
+import { UnauthorizedError, ValidationError } from '@/lib/errors'
 
-/** Kurulum yaşam döngüsü olayları — her eklentide ele alınması gerekenler. */
-const LIFECYCLE_UNINSTALL = 'plugin.uninstalled'
+/**
+ * Kurulum yaşam döngüsü olayları — adlar SDK katalogundan (LIFECYCLE_TYPES) alınmıştır.
+ * 🔴 Uydurma ad yazmak sessiz veri sızıntısıdır: olay eşleşmez, tenant verisi hiç silinmez.
+ */
+const LIFECYCLE_UNINSTALL = 'app.uninstalled'
+/** KVKK/GDPR silme talebi — müşteri verisi tutuluyorsa BURADA temizlenmelidir. */
+const LIFECYCLE_REDACT = 'customer.redact'
 
-export type EventHandler = (envelope: WebhookEnvelope) => Promise<void>
+export type EventHandler = (envelope: WebhookEnvelope, ref: TenantRef) => Promise<void>
+
+/** Doğrulanmış zarf + ortam — servis dışına bu çift taşınır. */
+export interface VerifiedEvent {
+  readonly envelope: WebhookEnvelope
+  readonly ref: TenantRef
+}
 
 /**
  * Webhook doğrulama, tekilleştirme ve yönlendirme.
@@ -18,69 +30,109 @@ export class WebhookService {
   readonly #installations: InstallationService
   readonly #eventLog: EventLogRepository
   readonly #handlers: ReadonlyMap<string, EventHandler>
+  readonly #fallbackEnvironment: Environment
 
   constructor(params: {
     installations: InstallationService
     eventLog: EventLogRepository
-    /** Olay tipi → işleyici. Eklentiye özgü akışlar buradan bağlanır. */
+    /** Zarfta `environment` yoksa (rollout öncesi kuyruklanmış gövde) kullanılır. */
+    fallbackEnvironment: Environment
     handlers?: ReadonlyMap<string, EventHandler>
   }) {
     this.#installations = params.installations
     this.#eventLog = params.eventLog
+    this.#fallbackEnvironment = params.fallbackEnvironment
     this.#handlers = params.handlers ?? new Map()
   }
 
   /**
    * İmzayı HAM gövde üzerinden doğrular ve zarfı çözer.
-   * Gövde burada parse EDİLMEZ — `request.json()` doğrulamadan önce çağrılmaz (§4.2).
+   *
+   * Ortam gövdeden okunur; `X-Restomenum-Environment` header'ı İMZAYA DAHİL DEĞİLDİR
+   * ve kullanılmaz. Ortam imza anahtarını seçmek için imzadan ÖNCE okunmak zorundadır —
+   * yalan söylenirse yanlış secret seçilir ve imza tutmaz, yani güvenli.
    */
-  async verify(rawBody: string, signatureHeader: string | null): Promise<WebhookEnvelope> {
+  async verify(rawBody: string, signatureHeader: string | null): Promise<VerifiedEvent> {
+    let unverified: unknown
+    try {
+      unverified = JSON.parse(rawBody)
+    } catch {
+      throw new ValidationError('Gövde geçerli JSON değil.')
+    }
+
+    const environment = readEnvironment(unverified) ?? this.#fallbackEnvironment
+    let ref: TenantRef | undefined
+    let installationFound = false
+
     const envelope = await verifyAndParseWebhook(rawBody, signatureHeader ?? undefined, {
       toleranceSec: SIGNATURE_TOLERANCE_SEC,
-      getSecret: (tenantId) => this.#installations.webhookSecretFor(tenantId),
+      getSecret: async (tenantId) => {
+        ref = { environment, tenantId }
+        const secret = await this.#installations.webhookSecretFor(ref)
+        installationFound = secret !== undefined
+        return secret
+      },
     })
 
-    if (envelope === null) {
+    if (envelope === null || ref === undefined) {
+      // Teslim sağlığını ayırt edilebilir kıl: kurulum mu yok, imza mı tutmuyor?
+      // İkisi de 401 döner ama nedenleri ve çözümleri tamamen farklıdır.
+      const reason = installationFound
+        ? 'imza uyuşmuyor (eski secret ya da oynanmış gövde)'
+        : 'bu ortamda kurulum yok'
+      console.log(`webhook: reddedildi env=${environment} neden=${reason}`)
       throw new UnauthorizedError('Webhook imzası geçersiz.')
     }
-    return envelope
+    return { envelope, ref }
   }
 
   /**
    * Olayı tam bir kez işler.
-   *
-   * Sahiplenme (`markSeen`) işten ÖNCE alınır ki eşzamanlı iki teslim aynı işi yapmasın.
-   * İş BAŞARISIZ olursa sahiplenme geri verilir — aksi halde geçici bir hata olayı
-   * kalıcı olarak kaybettirirdi: kayıt "görüldü" kalır, platformun retry'ları dedup'a
-   * takılır ve iş hiçbir zaman yapılmaz.
+   * İş başarısız olursa sahiplenme geri verilir — aksi halde geçici bir hata olayı
+   * kalıcı olarak kaybettirirdi (retry'lar dedup'a takılır).
    */
-  async process(envelope: WebhookEnvelope): Promise<void> {
-    const isNew = await this.#eventLog.markSeen(envelope.tenantId, envelope.id)
+  async process(event: VerifiedEvent): Promise<void> {
+    const { envelope, ref } = event
+    const isNew = await this.#eventLog.markSeen(ref, envelope.id)
     if (!isNew) {
-      console.log(`webhook: yinelenen olay atlandı type=${envelope.type}`)
+      console.log(`webhook: yinelenen olay atlandı type=${envelope.type} env=${ref.environment}`)
       return
     }
 
     try {
-      await this.#dispatch(envelope)
+      await this.#dispatch(event)
     } catch (error) {
-      await this.#eventLog.release(envelope.tenantId, envelope.id)
+      await this.#eventLog.release(ref, envelope.id)
       throw error
     }
   }
 
-  async #dispatch(envelope: WebhookEnvelope): Promise<void> {
+  async #dispatch({ envelope, ref }: VerifiedEvent): Promise<void> {
     if (envelope.type === LIFECYCLE_UNINSTALL) {
-      await this.#installations.removeInstall(envelope.tenantId)
+      await this.#installations.removeInstall(ref)
+      console.log(`webhook: kurulum kaldırıldı env=${ref.environment}`)
+      return
+    }
+
+    if (envelope.type === LIFECYCLE_REDACT) {
+      // Eklenti müşteri verisi tutmaya başladığında burası doldurulmak ZORUNDA.
+      console.log('webhook: customer.redact alındı — silinecek kalıcı müşteri verisi yok')
       return
     }
 
     const handler = this.#handlers.get(envelope.type)
     if (handler === undefined) {
-      console.log(`webhook: işleyicisiz olay type=${envelope.type}`)
+      console.log(`webhook: işleyicisiz olay type=${envelope.type} env=${ref.environment}`)
       return
     }
 
-    await handler(envelope)
+    await handler(envelope, ref)
   }
+}
+
+/** Doğrulanmamış gövdeden yalnız ortam alanını okur; tanınmayan değer yok sayılır. */
+export function readEnvironment(body: unknown): Environment | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const value = (body as { environment?: unknown }).environment
+  return value === 'sandbox' || value === 'production' ? value : undefined
 }

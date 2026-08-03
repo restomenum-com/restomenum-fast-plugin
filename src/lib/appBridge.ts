@@ -43,6 +43,15 @@ function isAllowedOrigin(origin: string): boolean {
   return (PANEL_ORIGINS as readonly string[]).includes(origin)
 }
 
+/**
+ * Sayfa bir üst pencere içinde mi (panel iframe'i)?
+ * Doğrudan tarayıcıda açıldığında false döner — çağıran, hata göstermek yerine
+ * panel dışı bir görünüm sunabilir.
+ */
+export function isEmbedded(): boolean {
+  return typeof window !== 'undefined' && window.parent !== window
+}
+
 /** Panele bir komut gönderip yanıtı bekler. */
 export function bridgeCall<T>(action: string, params?: unknown): Promise<T> {
   return new Promise<T>((resolve, reject) => {

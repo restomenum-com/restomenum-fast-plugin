@@ -1,7 +1,9 @@
-import { verifyWebhookSignature } from '@restomenum/plugin-sdk'
+import { verifyWebhookSignature, type Environment } from '@restomenum/plugin-sdk'
 import type { ZodType } from 'zod'
 
 import type { InstallationService } from '@/services/InstallationService'
+import { readEnvironment } from '@/services/WebhookService'
+import type { TenantRef } from '@/models/TenantRef'
 import { SIGNATURE_TOLERANCE_SEC } from '@/config'
 import { UnauthorizedError, ValidationError } from '@/lib/errors'
 
@@ -12,7 +14,6 @@ import { UnauthorizedError, ValidationError } from '@/lib/errors'
 
 const SIGNATURE_HEADER = 'x-restomenum-signature'
 
-/** İmza anahtarını seçmek için gövdeden okunması gereken TEK alan. */
 interface TenantScoped {
   readonly tenantId: string
 }
@@ -30,22 +31,24 @@ function readTenantId(body: unknown): string {
 
 export class SignedRequestService {
   readonly #installations: InstallationService
+  readonly #fallbackEnvironment: Environment
 
-  constructor(params: { installations: InstallationService }) {
+  constructor(params: { installations: InstallationService; fallbackEnvironment: Environment }) {
     this.#installations = params.installations
+    this.#fallbackEnvironment = params.fallbackEnvironment
   }
 
   /**
    * İmzayı HAM gövde üzerinden doğrular, sonra gövdeyi şemayla parse eder.
    *
-   * Sıra önemli: `tenantId` imzadan ÖNCE okunur çünkü anahtar seçimi için gerekir,
-   * ama doğrulanmamış hiçbir alan kullanılmaz — sahte `tenantId` başka tenant'ın
-   * secret'ını seçse bile imza tutmaz.
+   * `tenantId` ve `environment` imza anahtarını SEÇMEK için imzadan önce okunur, ama
+   * doğrulanmamış hiçbir alan iş mantığında kullanılmaz — sahte değerler yanlış secret
+   * seçtirir ve imza tutmaz.
    */
   async verify<T extends TenantScoped>(
     request: Request,
     schema: ZodType<T>,
-  ): Promise<{ body: T; rawBody: string }> {
+  ): Promise<{ body: T; ref: TenantRef; rawBody: string }> {
     const rawBody = await request.text()
 
     let unverified: unknown
@@ -55,8 +58,12 @@ export class SignedRequestService {
       throw new ValidationError('Gövde geçerli JSON değil.')
     }
 
-    const tenantId = readTenantId(unverified)
-    const secret = await this.#installations.webhookSecretFor(tenantId)
+    const ref: TenantRef = {
+      environment: readEnvironment(unverified) ?? this.#fallbackEnvironment,
+      tenantId: readTenantId(unverified),
+    }
+
+    const secret = await this.#installations.webhookSecretFor(ref)
     if (secret === undefined) {
       // Kurulu olmayan tenant ile imza doğrulanamaz — 401, kurulum durumunu sızdırmaz.
       throw new UnauthorizedError('İstek doğrulanamadı.')
@@ -78,6 +85,6 @@ export class SignedRequestService {
       throw new ValidationError(`Gövde şemaya uymuyor: ${fields}`)
     }
 
-    return { body: parsed.data, rawBody }
+    return { body: parsed.data, ref, rawBody }
   }
 }

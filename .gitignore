@@ -23,6 +23,8 @@ dist/
 .wrangler/
 .dev.vars
 .dev.vars.*
+# …ama şablon dosyası commit EDİLİR — yeni geliştiricinin tek örneği odur.
+!.dev.vars.example
 
 # Ortam değişkenleri ve secret'lar
 .env

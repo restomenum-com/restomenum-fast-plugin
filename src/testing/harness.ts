@@ -5,9 +5,12 @@ import { InstallationService } from '@/services/InstallationService'
 import { SessionService } from '@/services/SessionService'
 import { SignedRequestService } from '@/services/SignedRequestService'
 import { WebhookService } from '@/services/WebhookService'
+import { MaintenanceService } from '@/services/MaintenanceService'
 import { Installation } from '@/models/Installation'
 import { encryptSecret } from '@/lib/crypto'
 import type { Container } from '@/lib/container'
+import type { EventQueue } from '@/services/EventQueue'
+import type { VerifiedEvent } from '@/services/WebhookService'
 import {
   MemoryEventLogRepository,
   MemoryInstallationRepository,
@@ -15,9 +18,15 @@ import {
 
 /** Testler için ortak kurulum — YALNIZ test kodundan kullanılır. */
 
-/** Portalda oluşturulan gerçek eklentinin kimliği (gizli değil). */
-export const PLUGIN_ID = '27750a08-8a8e-43b5-a27e-e213305cbe25'
-export const OTHER_PLUGIN_ID = '00000000-0000-4000-8000-000000000000'
+/**
+ * Test kimlikleri — UYDURMADIR, gerçek portal kaydıyla ilgisi yoktur.
+ *
+ * 🔴 Gerçek `pluginId` ve `client_secret` KODA YAZILMAZ; `.dev.vars`'ta durur ve
+ * `config.ts` üzerinden okunur. Testlerin tek ihtiyacı iki FARKLI kimlik olması:
+ * biri bizim eklentimiz, diğeri `aud` reddini sınamak için başkasının.
+ */
+export const PLUGIN_ID = '11111111-1111-4111-8111-111111111111'
+export const OTHER_PLUGIN_ID = '22222222-2222-4222-8222-222222222222'
 
 export const TENANT_A = 'tenant-a'
 export const TENANT_B = 'tenant-b'
@@ -25,11 +34,25 @@ export const TENANT_B = 'tenant-b'
 /** Test fixture'ları — gerçek secret DEĞİL. */
 export const SECRET_A = 'webhook-secret-of-tenant-a'
 export const SECRET_B = 'webhook-secret-of-tenant-b'
+/** AYNI tenantId'nin PRODUCTION ortamındaki FARKLI secret'ı. */
+export const SECRET_A_PROD = 'webhook-secret-of-tenant-a-PRODUCTION'
 export const ENCRYPTION_KEY = 'zJ8kQm2Xv5PbN7rT1yUw9cE4hL6aS0dG3fH8jK5nM2Q='
 
 export const SIGNATURE_HEADER = 'x-restomenum-signature'
 export const REPLAY_WINDOW_SEC = 300
 export const MS_PER_SEC = 1000
+
+/**
+ * Test kuyruğu: enqueue edilen olayları toplar ve istenirse işler.
+ * Gerçek kuyruk gibi davranır — kabul eder, sonra tüketici çalıştırılır.
+ */
+export class RecordingEventQueue implements EventQueue {
+  readonly events: VerifiedEvent[] = []
+
+  async enqueue(event: VerifiedEvent): Promise<void> {
+    this.events.push(event)
+  }
+}
 
 /** İki tenant kurulu, tam bağlı bir container üretir. */
 export async function buildTestContainer(): Promise<Container> {
@@ -37,7 +60,6 @@ export async function buildTestContainer(): Promise<Container> {
 
   const installations = new InstallationService({
     adapter: new RestomenumAdapter({
-      environment: 'sandbox',
       pluginId: PLUGIN_ID,
       clientSecret: 'bu-testlerde-kullanilmiyor',
     }),
@@ -45,14 +67,18 @@ export async function buildTestContainer(): Promise<Container> {
     encryptionKey: ENCRYPTION_KEY,
   })
 
-  for (const [tenantId, secret] of [
-    [TENANT_A, SECRET_A],
-    [TENANT_B, SECRET_B],
+  // Üç kurulum: iki sandbox tenant'ı + AYNI tenantId'nin production karşılığı.
+  // Sonuncusu cross-environment ezilmesini ve secret karışmasını sınamak içindir.
+  for (const [environment, tenantId, secret] of [
+    ['sandbox', TENANT_A, SECRET_A],
+    ['sandbox', TENANT_B, SECRET_B],
+    ['production', TENANT_A, SECRET_A_PROD],
   ] as const) {
     await repository.upsert(
       new Installation({
+        environment,
         tenantId,
-        apiKey: await encryptSecret('api-key', ENCRYPTION_KEY),
+        apiKey: await encryptSecret(`api-key-${environment}`, ENCRYPTION_KEY),
         webhookSecret: await encryptSecret(secret, ENCRYPTION_KEY),
         scopes: ['orders:read'],
         installedAt: 1,
@@ -61,7 +87,10 @@ export async function buildTestContainer(): Promise<Container> {
     )
   }
 
+  const eventQueue = new RecordingEventQueue()
+
   return {
+    eventQueue,
     config: {
       pluginId: PLUGIN_ID,
       clientSecret: 'bu-testlerde-kullanilmiyor',
@@ -69,11 +98,17 @@ export async function buildTestContainer(): Promise<Container> {
       encryptionKey: ENCRYPTION_KEY,
     },
     installations,
-    sessions: new SessionService({ installations, pluginId: PLUGIN_ID }),
-    signedRequests: new SignedRequestService({ installations }),
+    sessions: new SessionService({
+      installations,
+      pluginId: PLUGIN_ID,
+      fallbackEnvironment: 'sandbox',
+    }),
+    signedRequests: new SignedRequestService({ installations, fallbackEnvironment: 'sandbox' }),
+    maintenance: new MaintenanceService({ eventLog: new MemoryEventLogRepository() }),
     webhooks: new WebhookService({
       installations,
       eventLog: new MemoryEventLogRepository(),
+      fallbackEnvironment: 'sandbox',
     }),
   }
 }
@@ -117,6 +152,8 @@ export async function makeSessionToken(params: {
   secret: string
   aud?: string
   tenantId?: string
+  /** Platform artık bu claim'i gönderiyor (canlıda ölçüldü). */
+  environment?: string
   role?: string
   expOffsetSec?: number
   algorithm?: string
@@ -126,6 +163,7 @@ export async function makeSessionToken(params: {
   const signingInput = `${base64Url({ alg: params.algorithm ?? 'HS256', typ: 'JWT' })}.${base64Url({
     iss: 'restomenum',
     aud: audience,
+    environment: params.environment ?? 'sandbox',
     sub: 'user-1',
     role: params.role ?? 'manager',
     tenantId: params.tenantId ?? TENANT_A,

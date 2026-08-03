@@ -13,6 +13,13 @@ const FRAME_ANCESTORS = `frame-ancestors ${PANEL_ORIGINS_FOR_CSP.join(' ')}`
 const UI_PATH_PATTERN = '/settings/:path*'
 
 const nextConfig: NextConfig = {
+  /**
+   * Cloudflare Worker paketi standalone çıktı üzerine kurulur.
+   * `opennextjs-cloudflare build --skipNextBuild` derlemeyi kendisi yapmadığı için
+   * bu ayar BURADA açık olmak zorunda; yoksa `.next/standalone` bulunamaz.
+   */
+  output: 'standalone',
+
   async headers() {
     return [
       {

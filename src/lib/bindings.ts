@@ -12,11 +12,19 @@ export interface Bindings {
   /** `wrangler secret put` ile verilir */
   readonly RESTOMENUM_CLIENT_SECRET?: string
   readonly SECRET_ENCRYPTION_KEY?: string
-  /** Veritabanı seçimi yapılınca dolar (§6) — D1 binding'i ya da Neon bağlantı dizesi. */
+  /** D1 binding'i (§6). */
   readonly DB?: unknown
-  readonly DATABASE_URL?: string
+  /** Cloudflare Queues producer binding'i — dayanıklı arka plan işi için. */
+  readonly EVENT_QUEUE?: { send(body: unknown): Promise<void> }
 }
 
+/**
+ * İstek bağlamındaki binding'ler.
+ *
+ * 🔴 YALNIZ `fetch` yolunda çalışır. `queue` ve `scheduled` handler'ları Next.js istek
+ * bağlamının DIŞINDADIR; oralarda binding'ler handler argümanından gelir ve
+ * `buildContainer({ bindings })` ile AÇIKÇA enjekte edilir.
+ */
 export function getBindings(): Bindings {
   return getCloudflareContext().env as unknown as Bindings
 }

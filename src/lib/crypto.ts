@@ -11,6 +11,13 @@ const IV_BYTES = 12
 const HMAC_HASH = 'SHA-256'
 const STATE_SEPARATOR = '.'
 
+/**
+ * Kendi ürettiğimiz state'leri işaretler.
+ * Kurulumu marketplace başlattığında `state` PLATFORM tarafından üretilir ve bize opaktır —
+ * imzasını arayamayız. Bu önek, hangi state'in bizim olduğunu ayırt etmemizi sağlar.
+ */
+const STATE_PREFIX = 'rmp1'
+
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -103,8 +110,13 @@ async function hmac(message: string, base64Key: string): Promise<string> {
  */
 export async function createSignedState(issuedAtSeconds: number, secret: string): Promise<string> {
   const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(16)))
-  const payload = `${issuedAtSeconds}${STATE_SEPARATOR}${nonce}`
+  const payload = `${STATE_PREFIX}${STATE_SEPARATOR}${issuedAtSeconds}${STATE_SEPARATOR}${nonce}`
   return `${payload}${STATE_SEPARATOR}${await hmac(payload, secret)}`
+}
+
+/** State'i biz mi ürettik? Değilse platform kaynaklıdır ve doğrulanamaz. */
+export function isOwnState(state: string): boolean {
+  return state.startsWith(`${STATE_PREFIX}${STATE_SEPARATOR}`)
 }
 
 /** İmzalı state'i doğrular; imza tutmuyorsa ya da süresi geçtiyse hata fırlatır. */
@@ -115,12 +127,21 @@ export async function verifySignedState(
   ttlSeconds: number,
 ): Promise<void> {
   const parts = state.split(STATE_SEPARATOR)
-  const [issuedAt, nonce, signature] = parts
-  if (parts.length !== 3 || issuedAt === undefined || nonce === undefined || signature === undefined) {
+  const [prefix, issuedAt, nonce, signature] = parts
+  if (
+    parts.length !== 4 ||
+    prefix !== STATE_PREFIX ||
+    issuedAt === undefined ||
+    nonce === undefined ||
+    signature === undefined
+  ) {
     throw new UnauthorizedError('state biçimi geçersiz')
   }
 
-  const expected = await hmac(`${issuedAt}${STATE_SEPARATOR}${nonce}`, secret)
+  const expected = await hmac(
+    `${STATE_PREFIX}${STATE_SEPARATOR}${issuedAt}${STATE_SEPARATOR}${nonce}`,
+    secret,
+  )
   if (!timingSafeEqual(expected, signature)) {
     throw new UnauthorizedError('state imzası geçersiz')
   }

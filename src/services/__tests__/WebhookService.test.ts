@@ -4,6 +4,7 @@ import { signPayload, type WebhookEnvelope } from '@restomenum/plugin-sdk'
 import { WebhookService, type EventHandler } from '@/services/WebhookService'
 import type { InstallationService } from '@/services/InstallationService'
 import type { EventLogRepository } from '@/repositories/EventLogRepository'
+import type { TenantRef } from '@/models/TenantRef'
 import { UnauthorizedError } from '@/lib/errors'
 
 const TENANT_ID = 'tenant-1'
@@ -11,6 +12,7 @@ const WEBHOOK_SECRET = 'test-secret-value'
 const SIGNATURE_HEADER = 'x-restomenum-signature'
 const REPLAY_WINDOW_SECONDS = 300
 const MILLISECONDS_PER_SECOND = 1000
+const REF: TenantRef = { environment: 'sandbox', tenantId: TENANT_ID }
 
 function envelopeBody(overrides: Partial<WebhookEnvelope> = {}): string {
   return JSON.stringify({
@@ -40,6 +42,7 @@ function buildService(params: {
   const eventLog: EventLogRepository = {
     markSeen: params.markSeen ?? (async () => true),
     release,
+    pruneSeenBefore: async () => 0,
   }
 
   return {
@@ -48,6 +51,7 @@ function buildService(params: {
     service: new WebhookService({
       installations,
       eventLog,
+      fallbackEnvironment: 'sandbox',
       ...(params.handlers !== undefined ? { handlers: params.handlers } : {}),
     }),
   }
@@ -58,10 +62,11 @@ describe('WebhookService.verify', () => {
     const body = envelopeBody()
     const { service } = buildService({ secret: WEBHOOK_SECRET })
 
-    const envelope = await service.verify(body, signPayload(body, WEBHOOK_SECRET))
+    const { envelope, ref } = await service.verify(body, signPayload(body, WEBHOOK_SECRET))
 
     expect(envelope.tenantId).toBe(TENANT_ID)
     expect(envelope.id).toBe('evt-1')
+    expect(ref).toEqual({ environment: 'sandbox', tenantId: TENANT_ID })
   })
 
   it('gövde oynanmışsa reddeder', async () => {
@@ -101,7 +106,7 @@ describe('WebhookService.verify', () => {
 })
 
 describe('WebhookService.process', () => {
-  const envelope: WebhookEnvelope = {
+  const baseEnvelope: WebhookEnvelope = {
     id: 'evt-1',
     type: 'table.created',
     version: '1',
@@ -117,7 +122,7 @@ describe('WebhookService.process', () => {
       handlers: new Map([['table.created', handler]]),
     })
 
-    await service.process(envelope)
+    await service.process({ envelope: baseEnvelope, ref: REF })
 
     expect(handler).toHaveBeenCalledOnce()
   })
@@ -130,7 +135,7 @@ describe('WebhookService.process', () => {
       handlers: new Map([['table.created', handler]]),
     })
 
-    await service.process(envelope)
+    await service.process({ envelope: baseEnvelope, ref: REF })
 
     expect(handler).not.toHaveBeenCalled()
   })
@@ -138,14 +143,14 @@ describe('WebhookService.process', () => {
   it('uninstall olayında kurulumu siler', async () => {
     const { service, removeInstall } = buildService({ secret: WEBHOOK_SECRET })
 
-    await service.process({ ...envelope, type: 'plugin.uninstalled' })
+    await service.process({ envelope: { ...baseEnvelope, type: 'app.uninstalled' }, ref: REF })
 
-    expect(removeInstall).toHaveBeenCalledWith(TENANT_ID)
+    expect(removeInstall).toHaveBeenCalledWith(REF)
   })
 })
 
 describe('WebhookService dedup dayanıklılığı', () => {
-  const envelope: WebhookEnvelope = {
+  const baseEnvelope: WebhookEnvelope = {
     id: 'evt-9',
     type: 'table.created',
     version: '1',
@@ -163,9 +168,11 @@ describe('WebhookService dedup dayanıklılığı', () => {
       handlers: new Map([['table.created', failing]]),
     })
 
-    await expect(service.process(envelope)).rejects.toThrow('geçici hata')
+    await expect(
+      service.process({ envelope: baseEnvelope, ref: REF }),
+    ).rejects.toThrow('geçici hata')
     // release çağrılmazsa platform retry'ı dedup'a takılır ve iş hiç yapılmaz.
-    expect(release).toHaveBeenCalledWith(TENANT_ID, 'evt-9')
+    expect(release).toHaveBeenCalledWith(REF, 'evt-9')
   })
 
   it('başarılı işlemede sahiplenmeyi geri VERMEZ', async () => {
@@ -174,7 +181,7 @@ describe('WebhookService dedup dayanıklılığı', () => {
       handlers: new Map([['table.created', async () => {}]]),
     })
 
-    await service.process(envelope)
+    await service.process({ envelope: baseEnvelope, ref: REF })
 
     expect(release).not.toHaveBeenCalled()
   })

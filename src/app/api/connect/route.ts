@@ -1,6 +1,8 @@
+import type { Environment } from '@restomenum/plugin-sdk'
+
 import { buildContainer } from '@/lib/container'
 import { CONNECT_STATE_TTL_SECONDS } from '@/config'
-import { createSignedState, verifySignedState } from '@/lib/crypto'
+import { createSignedState, isOwnState, verifySignedState } from '@/lib/crypto'
 import { UnauthorizedError, ValidationError, toErrorResponse } from '@/lib/errors'
 
 /**
@@ -15,8 +17,30 @@ import { UnauthorizedError, ValidationError, toErrorResponse } from '@/lib/error
 const MILLISECONDS_PER_SECOND = 1000
 const LOG_PREFIX = 'oauth:'
 
-/** Kurulum bittiğinde kullanıcının döneceği panel içi yol. */
-const POST_INSTALL_PATH = '/settings'
+/**
+ * Kurulum bittiğinde gidilecek yol.
+ * 🔴 `/settings` OLAMAZ: OAuth akışı ÜST PENCEREDE döner, orası ise yalnız panel
+ * iframe'i içinde çalışan bir sayfadır ve App Bridge bulamayıp hata gösterir.
+ */
+const POST_INSTALL_PATH = '/installed'
+
+/** Ortamı taşıyabilecek parametre adları — platform hangisini kullanırsa yakalanır. */
+const ENVIRONMENT_PARAMS = ['environment', 'env', 'mode'] as const
+
+/**
+ * Connect çağrısındaki ortamı çözer.
+ *
+ * Connect bir tarayıcı yönlendirmesidir; imzalı gövde YOKTUR. Ortam bir sorgu
+ * parametresiyle geliyorsa o kullanılır; gelmiyorsa deployment varsayılanına düşülür
+ * ve bu durum log'lanır — sessizce yanlış ortama yazmamak için.
+ */
+function resolveEnvironment(url: URL, fallback: Environment): Environment {
+  for (const name of ENVIRONMENT_PARAMS) {
+    const value = url.searchParams.get(name)
+    if (value === 'sandbox' || value === 'production') return value
+  }
+  return fallback
+}
 
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -26,27 +50,50 @@ export async function GET(request: Request): Promise<Response> {
     const state = url.searchParams.get('state')
     const nowSeconds = Math.floor(Date.now() / MILLISECONDS_PER_SECOND)
 
+    // Hangi parametrelerin geldiğini görünür kıl — DEĞERLER değil yalnız ADLAR yazılır
+    // (`code` ve `state` hassastır).
+    console.log(`${LOG_PREFIX} connect parametreleri: ${[...url.searchParams.keys()].join(', ')}`)
+
     // Akışın başı: imzalı state üret. Sunucuda nonce saklamaya gerek yok.
     if (code === null) {
       const issued = await createSignedState(nowSeconds, container.config.clientSecret)
       return Response.json({ state: issued })
     }
 
-    if (state === null) {
+    if (state === null || state.length === 0) {
       throw new ValidationError('state parametresi eksik.')
     }
 
-    await verifySignedState(
-      state,
-      container.config.clientSecret,
-      nowSeconds,
-      CONNECT_STATE_TTL_SECONDS,
+    if (isOwnState(state)) {
+      // Akışı BİZ başlattık → kendi imzamızı katı biçimde doğrularız (fail-closed).
+      await verifySignedState(
+        state,
+        container.config.clientSecret,
+        nowSeconds,
+        CONNECT_STATE_TTL_SECONDS,
+      )
+    } else {
+      // Kurulumu marketplace başlattı: `state` PLATFORM tarafından üretildi ve bize opaktır —
+      // imzalamadığımız bir değeri doğrulayamayız, reddetmek her kurulumu kırardı.
+      //
+      // Bu akışta gerçek bariyer `code`'dur: tek kullanımlık ve yalnız sunucuda tutulan
+      // `client_secret` ile takas edilebilir. Uydurma bir code ile gelen saldırgan token
+      // değişiminde `invalid_grant` alır (canlı uçta doğrulandı).
+      console.log(`${LOG_PREFIX} platform kaynaklı state — doğrulama code takasında yapılır`)
+    }
+
+    const environment = resolveEnvironment(url, container.config.environment)
+    const fromParam = ENVIRONMENT_PARAMS.some((name) => url.searchParams.has(name))
+    console.log(
+      `${LOG_PREFIX} ortam=${environment} (${fromParam ? 'parametreden' : 'VARSAYILAN — parametre gelmedi'})`,
     )
 
-    const installation = await container.installations.completeInstall(code)
-    console.log(`${LOG_PREFIX} kurulum tamamlandı tenant=${installation.tenantId}`)
+    const installation = await container.installations.completeInstall(code, environment)
+    console.log(
+      `${LOG_PREFIX} kurulum tamamlandı env=${installation.environment} tenant=${installation.tenantId}`,
+    )
 
-    // Kurulum sonrası kullanıcıyı ayar ekranına al.
+    // Kullanıcı üst pencerede; iframe'e özgü olmayan bir onay sayfasına alınır.
     return Response.redirect(new URL(POST_INSTALL_PATH, url.origin), 302)
   } catch (error) {
     // invalid_grant → code tükenmiş; kullanıcı Connect'i baştan başlatmalı.

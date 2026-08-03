@@ -1,0 +1,7 @@
+# Yerel geliştirme secret'ları. Bu dosyanın kopyasını `.dev.vars` olarak oluştur.
+# .dev.vars ASLA commit edilmez (.gitignore'da).
+RESTOMENUM_PLUGIN_ID=""
+RESTOMENUM_CLIENT_SECRET="cs_..."
+RESTOMENUM_ENVIRONMENT="sandbox"
+# base64 kodlu 32 bayt:  openssl rand -base64 32
+SECRET_ENCRYPTION_KEY=""

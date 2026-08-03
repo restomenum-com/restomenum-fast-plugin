@@ -10,8 +10,10 @@ const LOG_PREFIX = 'session:'
 
 export async function handleSessionMe(request: Request, container: Container): Promise<Response> {
   try {
-    const claims = await container.sessions.authenticate(request.headers.get('authorization'))
-    const installation = await container.installations.requireInstallation(claims.tenantId)
+    const { claims, ref } = await container.sessions.authenticate(
+      request.headers.get('authorization'),
+    )
+    const installation = await container.installations.requireInstallation(ref)
 
     // Alan alan açık dönüşüm — model doğrudan serileştirilmez (§2.4).
     return Response.json({

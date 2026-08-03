@@ -12,6 +12,7 @@ import {
   SECRET_B,
   SIGNATURE_HEADER,
   TENANT_A,
+  RecordingEventQueue,
   buildTestContainer,
   signedRequest,
   webhookBody,
@@ -24,7 +25,6 @@ import {
  */
 
 let container: Container
-const noop = (): void => {}
 
 beforeEach(async () => {
   container = await buildTestContainer()
@@ -33,7 +33,7 @@ beforeEach(async () => {
 describe('webhook — imza doğrulaması', () => {
   it('geçerli imzayı kabul eder → 202', async () => {
     const request = signedRequest('https://x/api/webhook', webhookBody(), SECRET_A)
-    expect((await handleWebhook(request, container, noop)).status).toBe(202)
+    expect((await handleWebhook(request, container)).status).toBe(202)
   })
 
   it('🔴 imza header yoksa 401', async () => {
@@ -41,7 +41,7 @@ describe('webhook — imza doğrulaması', () => {
       method: 'POST',
       body: JSON.stringify(webhookBody()),
     })
-    expect((await handleWebhook(request, container, noop)).status).toBe(401)
+    expect((await handleWebhook(request, container)).status).toBe(401)
   })
 
   it('🔴 gövde imzalandıktan SONRA değiştirilmişse 401', async () => {
@@ -54,13 +54,13 @@ describe('webhook — imza doğrulaması', () => {
       headers: { [SIGNATURE_HEADER]: signature },
       body: tampered,
     })
-    expect((await handleWebhook(request, container, noop)).status).toBe(401)
+    expect((await handleWebhook(request, container)).status).toBe(401)
   })
 
   it('🔴 replay penceresi dışındaki eski imzayı reddeder', async () => {
     const stale = Math.floor(Date.now() / MS_PER_SEC) - (REPLAY_WINDOW_SEC + 60)
     const request = signedRequest('https://x/api/webhook', webhookBody(), SECRET_A, stale)
-    expect((await handleWebhook(request, container, noop)).status).toBe(401)
+    expect((await handleWebhook(request, container)).status).toBe(401)
   })
 
   it("🔴 CROSS-TENANT: B'nin secret'ıyla A adına imzalanan istek reddedilir", async () => {
@@ -69,7 +69,7 @@ describe('webhook — imza doğrulaması', () => {
       webhookBody({ tenantId: TENANT_A }),
       SECRET_B,
     )
-    expect((await handleWebhook(request, container, noop)).status).toBe(401)
+    expect((await handleWebhook(request, container)).status).toBe(401)
   })
 
   it('🔴 kurulu olmayan tenant reddedilir', async () => {
@@ -78,22 +78,31 @@ describe('webhook — imza doğrulaması', () => {
       webhookBody({ tenantId: 'kurulu-degil' }),
       SECRET_A,
     )
-    expect((await handleWebhook(request, container, noop)).status).toBe(401)
+    expect((await handleWebhook(request, container)).status).toBe(401)
   })
 
-  it('🔴 imza geçersizken işleyici HİÇ çağrılmaz', async () => {
-    let dispatched = false
+  it('🔴 imza geçersizken olay KUYRUĞA HİÇ girmez', async () => {
+    const queue = container.eventQueue as RecordingEventQueue
     const request = signedRequest('https://x/api/webhook', webhookBody(), SECRET_B)
-    await handleWebhook(request, container, (promise) => {
-      dispatched = true
-      void promise
-    })
-    expect(dispatched).toBe(false)
+
+    await handleWebhook(request, container)
+
+    expect(queue.events).toHaveLength(0)
+  })
+
+  it('geçerli imzada olay kuyruğa girer', async () => {
+    const queue = container.eventQueue as RecordingEventQueue
+    const request = signedRequest('https://x/api/webhook', webhookBody(), SECRET_A)
+
+    await handleWebhook(request, container)
+
+    expect(queue.events).toHaveLength(1)
+    expect(queue.events[0]?.ref).toEqual({ environment: 'sandbox', tenantId: TENANT_A })
   })
 
   it('401 yanıtı secret sızdırmaz', async () => {
     const request = signedRequest('https://x/api/webhook', webhookBody(), SECRET_B)
-    const text = await (await handleWebhook(request, container, noop)).text()
+    const text = await (await handleWebhook(request, container)).text()
     expect(text).not.toContain(SECRET_A)
     expect(text).not.toContain(SECRET_B)
   })

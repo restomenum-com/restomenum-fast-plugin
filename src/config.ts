@@ -3,7 +3,7 @@ import { PANEL_ORIGINS, SIGNATURE_TOLERANCE_SEC } from '@restomenum/plugin-sdk'
 import type { Environment } from '@restomenum/plugin-sdk'
 
 import { ConfigError } from '@/lib/errors'
-import { getBindings } from '@/lib/bindings'
+import type { Bindings } from '@/lib/bindings'
 
 /**
  * Ortam değişkenlerinin TEK okuma noktası.
@@ -36,9 +36,7 @@ export type AppConfig = z.infer<typeof configSchema> & { environment: Environmen
  * Binding'lerden config üretir ve doğrular.
  * Kritik değişken eksikse ConfigError fırlatır → uç 503 döner (sessiz bozulma yasak).
  */
-export function loadConfig(): AppConfig {
-  const bindings = getBindings()
-
+export function loadConfig(bindings: Bindings): AppConfig {
   const result = configSchema.safeParse({
     pluginId: bindings.RESTOMENUM_PLUGIN_ID,
     clientSecret: bindings.RESTOMENUM_CLIENT_SECRET,

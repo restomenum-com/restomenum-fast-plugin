@@ -49,10 +49,13 @@ export class UpstreamError extends AppError {
   readonly status = 502
   readonly code = 'upstream_error'
   readonly retryAfterSeconds: number | undefined
+  /** Geçici mi? 429 ve 5xx yeniden denenir; diğer 4xx denenmez (aynı sonucu verir). */
+  readonly retryable: boolean
 
-  constructor(message: string, retryAfterSeconds?: number) {
+  constructor(message: string, options: { retryAfterSeconds?: number; retryable?: boolean } = {}) {
     super(message)
-    this.retryAfterSeconds = retryAfterSeconds
+    this.retryAfterSeconds = options.retryAfterSeconds
+    this.retryable = options.retryable ?? false
   }
 }
 

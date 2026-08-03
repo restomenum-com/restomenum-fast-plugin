@@ -4,14 +4,14 @@ import { InstallationService } from '@/services/InstallationService'
 import { SessionService } from '@/services/SessionService'
 import { SignedRequestService } from '@/services/SignedRequestService'
 import { WebhookService, type EventHandler } from '@/services/WebhookService'
-import {
-  UnconfiguredInstallationRepository,
-  type InstallationRepository,
-} from '@/repositories/InstallationRepository'
-import {
-  UnconfiguredEventLogRepository,
-  type EventLogRepository,
-} from '@/repositories/EventLogRepository'
+import { MaintenanceService } from '@/services/MaintenanceService'
+import type { InstallationRepository } from '@/repositories/InstallationRepository'
+import type { EventLogRepository } from '@/repositories/EventLogRepository'
+import { D1InstallationRepository } from '@/repositories/D1InstallationRepository'
+import { D1EventLogRepository } from '@/repositories/D1EventLogRepository'
+import { getDatabase } from '@/db/client'
+import { getBindings, getExecutionContext, type Bindings } from '@/lib/bindings'
+import { CloudflareEventQueue, InlineEventQueue, type EventQueue } from '@/services/EventQueue'
 
 /**
  * Kompozisyon kökü — bağımlılıklar YALNIZ burada kurulur (§2.2).
@@ -26,27 +26,39 @@ export interface Container {
   readonly sessions: SessionService
   readonly signedRequests: SignedRequestService
   readonly webhooks: WebhookService
+  readonly maintenance: MaintenanceService
+  /** Doğrulanmış olayları dayanıklı işleme hattına verir. */
+  readonly eventQueue: EventQueue
 }
 
 export interface ContainerOverrides {
+  /**
+   * Binding'ler. `fetch` yolunda atlanabilir (istek bağlamından okunur); `queue` ve
+   * `scheduled` handler'larında ZORUNLUDUR — orada istek bağlamı yoktur.
+   */
+  bindings?: Bindings
+  eventQueue?: EventQueue
   installationRepository?: InstallationRepository
   eventLogRepository?: EventLogRepository
   eventHandlers?: ReadonlyMap<string, EventHandler>
 }
 
-/**
- * Veritabanı seçildiğinde (§6) buradaki iki `Unconfigured…` yerine somut Drizzle
- * repository'leri geçilir — başka hiçbir dosya değişmez.
- */
+/** Veri katmanı D1'dir (§6). Testler `overrides` ile sahte repository enjekte eder. */
 export function buildContainer(overrides: ContainerOverrides = {}): Container {
-  const config = loadConfig()
+  const bindings = overrides.bindings ?? getBindings()
+  const config = loadConfig(bindings)
+
+  // DB yalnız gerçekten gerekliyse açılır — override verildiyse binding hiç aranmaz.
+  const needsDatabase =
+    overrides.installationRepository === undefined || overrides.eventLogRepository === undefined
+  const db = needsDatabase ? getDatabase(bindings) : undefined
 
   const installationRepository =
-    overrides.installationRepository ?? new UnconfiguredInstallationRepository()
-  const eventLogRepository = overrides.eventLogRepository ?? new UnconfiguredEventLogRepository()
+    overrides.installationRepository ?? new D1InstallationRepository(db!)
+  const eventLogRepository = overrides.eventLogRepository ?? new D1EventLogRepository(db!)
 
+  // Ortam adapter'a örnek başına DEĞİL, çağrı başına verilir (§ ortam ayrımı).
   const adapter = new RestomenumAdapter({
-    environment: config.environment,
     pluginId: config.pluginId,
     clientSecret: config.clientSecret,
   })
@@ -57,15 +69,38 @@ export function buildContainer(overrides: ContainerOverrides = {}): Container {
     encryptionKey: config.encryptionKey,
   })
 
+  const webhooks = new WebhookService({
+    installations,
+    eventLog: eventLogRepository,
+    fallbackEnvironment: config.environment,
+    ...(overrides.eventHandlers !== undefined ? { handlers: overrides.eventHandlers } : {}),
+  })
+
+  // Kuyruk binding'i varsa dayanıklı hat; yoksa waitUntil'a düşer ve UYARIR.
+  const queueBinding = bindings.EVENT_QUEUE
+  const eventQueue: EventQueue =
+    overrides.eventQueue ??
+    (queueBinding !== undefined
+      ? new CloudflareEventQueue(queueBinding)
+      : new InlineEventQueue({
+          run: (event) => webhooks.process(event),
+          waitUntil: (promise) => getExecutionContext().waitUntil(promise),
+        }))
+
   return {
     config,
+    eventQueue,
     installations,
-    sessions: new SessionService({ installations, pluginId: config.pluginId }),
-    signedRequests: new SignedRequestService({ installations }),
-    webhooks: new WebhookService({
+    sessions: new SessionService({
       installations,
-      eventLog: eventLogRepository,
-      ...(overrides.eventHandlers !== undefined ? { handlers: overrides.eventHandlers } : {}),
+      pluginId: config.pluginId,
+      fallbackEnvironment: config.environment,
     }),
+    signedRequests: new SignedRequestService({
+      installations,
+      fallbackEnvironment: config.environment,
+    }),
+    maintenance: new MaintenanceService({ eventLog: eventLogRepository }),
+    webhooks,
   }
 }

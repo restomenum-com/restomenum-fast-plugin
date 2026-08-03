@@ -1,12 +1,17 @@
+import type { Environment } from '@restomenum/plugin-sdk'
+
 import type { RestomenumAdapter } from '@/adapters/RestomenumAdapter'
 import type { InstallationRepository } from '@/repositories/InstallationRepository'
 import { Installation } from '@/models/Installation'
+import { type TenantRef, tenantKey } from '@/models/TenantRef'
 import { NotFoundError } from '@/lib/errors'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 
 /**
  * Kurulum yaşam döngüsü: Connect → token değişimi → şifreli saklama → kaldırma.
- * Bağımlılıklar constructor'dan gelir; burada somut bağımlılık `new`'lenmez (§2.2).
+ * Bağımlılıklar constructor'dan gelir (§2.2).
+ *
+ * 🔴 Her işlem ORTAM ile scope'lanır — `tenantId` tek başına kimlik değildir.
  */
 export class InstallationService {
   readonly #adapter: RestomenumAdapter
@@ -15,10 +20,8 @@ export class InstallationService {
   readonly #now: () => number
 
   /**
-   * İSTEK KAPSAMLI okuma memo'su.
-   * Güvenli çünkü container her istekte yeniden kurulur — bu alan modül kapsamında
-   * yaşamaz, dolayısıyla eşzamanlı istekler arasında paylaşılmaz (§2.5).
-   * Tek bir istekte aynı tenant'ı 2-3 kez okumayı (imza + yetki + gövde) tek okumaya indirir.
+   * İSTEK KAPSAMLI okuma memo'su (anahtar: ortam+tenant).
+   * Güvenli çünkü container her istekte yeniden kurulur — modül kapsamında yaşamaz (§2.5).
    */
   readonly #cache = new Map<string, Installation | null>()
 
@@ -26,7 +29,6 @@ export class InstallationService {
     adapter: RestomenumAdapter
     repository: InstallationRepository
     encryptionKey: string
-    /** Test'te sabitlenebilsin diye zaman kaynağı enjekte edilir. */
     now?: () => number
   }) {
     this.#adapter = params.adapter
@@ -36,14 +38,15 @@ export class InstallationService {
   }
 
   /**
-   * `code`'u credential'a çevirip tenant başına ŞİFRELİ saklar.
+   * `code`'u credential'a çevirip ORTAM + tenant başına ŞİFRELİ saklar.
    * Verilen `scopes` istenenin alt kümesi olabilir — dönen değer yazılır (§4.1).
    */
-  async completeInstall(code: string): Promise<Installation> {
-    const credentials = await this.#adapter.exchangeInstallCode(code)
+  async completeInstall(code: string, environment: Environment): Promise<Installation> {
+    const credentials = await this.#adapter.exchangeInstallCode(code, environment)
     const timestamp = this.#now()
 
     const installation = new Installation({
+      environment,
       tenantId: credentials.tenantId,
       apiKey: await encryptSecret(credentials.apiKey, this.#encryptionKey),
       webhookSecret: await encryptSecret(credentials.webhookSecret, this.#encryptionKey),
@@ -53,44 +56,47 @@ export class InstallationService {
     })
 
     await this.#repository.upsert(installation)
-    this.#cache.set(installation.tenantId, installation)
+    this.#cache.set(tenantKey(installation.ref), installation)
     return installation
   }
 
   /** Tek okuma noktası — aynı istek içinde tekrarlanan sorguyu (N+1) önler. */
-  async #load(tenantId: string): Promise<Installation | null> {
-    const cached = this.#cache.get(tenantId)
+  async #load(ref: TenantRef): Promise<Installation | null> {
+    const key = tenantKey(ref)
+    const cached = this.#cache.get(key)
     if (cached !== undefined) return cached
-    const installation = await this.#repository.findByTenantId(tenantId)
-    this.#cache.set(tenantId, installation)
+    const installation = await this.#repository.findByRef(ref)
+    this.#cache.set(key, installation)
     return installation
   }
 
-  /** Kurulu tenant'ın çözülmüş `webhookSecret`'i — imza ve session token doğrulaması için. */
-  async webhookSecretFor(tenantId: string): Promise<string | undefined> {
-    const installation = await this.#load(tenantId)
+  /** Kurulu tenant'ın çözülmüş `webhookSecret`'i — imza doğrulaması için. */
+  async webhookSecretFor(ref: TenantRef): Promise<string | undefined> {
+    const installation = await this.#load(ref)
     if (installation === null) return undefined
     return decryptSecret(installation.webhookSecret, this.#encryptionKey)
   }
 
+
+
   /** Kurulumu getirir; yoksa NotFoundError. */
-  async requireInstallation(tenantId: string): Promise<Installation> {
-    const installation = await this.#load(tenantId)
+  async requireInstallation(ref: TenantRef): Promise<Installation> {
+    const installation = await this.#load(ref)
     if (installation === null) {
       throw new NotFoundError('Bu tenant için kurulum bulunamadı.')
     }
     return installation
   }
 
-  /** Çözülmüş apiKey — yalnız Callback API çağrısı yapılacağı anda üretilir, saklanmaz. */
-  async apiKeyFor(tenantId: string): Promise<string> {
-    const installation = await this.requireInstallation(tenantId)
+  /** Çözülmüş apiKey — yalnız Callback API çağrısı anında üretilir, saklanmaz. */
+  async apiKeyFor(ref: TenantRef): Promise<string> {
+    const installation = await this.requireInstallation(ref)
     return decryptSecret(installation.apiKey, this.#encryptionKey)
   }
 
-  /** Kurulum kaldırıldı: tenant'a ait kayıtlar silinir. */
-  async removeInstall(tenantId: string): Promise<void> {
-    await this.#repository.deleteByTenantId(tenantId)
-    this.#cache.set(tenantId, null)
+  /** Kurulum kaldırıldı: O ORTAMDAKİ tenant kayıtları silinir. */
+  async removeInstall(ref: TenantRef): Promise<void> {
+    await this.#repository.deleteByRef(ref)
+    this.#cache.set(tenantKey(ref), null)
   }
 }

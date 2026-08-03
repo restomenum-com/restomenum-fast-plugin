@@ -1,7 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // 🔴 Bu ad workers.dev alt alan adını belirler ve `package.json` name ile AYNI olmalıdır.
+  // `/setup` kurulum röportajı ikisini birlikte değiştirir; elle tek tarafı değiştirme.
   "name": "restomenum-plugin",
-  "main": ".open-next/worker.js",
+  // OpenNext'in ürettiği worker YALNIZ fetch içerir; scheduled ve queue handler'ları
+  // için onu saran kendi girişimizi kullanırız (worker/index.ts).
+  "main": "worker/index.ts",
   "compatibility_date": "2025-09-01",
 
   // nodejs_compat ZORUNLU — @restomenum/plugin-sdk `node:crypto` kullanıyor.
@@ -16,15 +20,40 @@
     "enabled": true
   },
 
+  // Dedup tablosunun budanması — her gece 03:00 UTC (§2.6 saklama politikası).
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
+
+  // Dayanıklı olay işleme. `waitUntil` isolate ölürse işi kaybeder; kuyruk kaybetmez.
+  "queues": {
+    "producers": [{ "binding": "EVENT_QUEUE", "queue": "restomenum-plugin-events" }],
+    "consumers": [
+      {
+        "queue": "restomenum-plugin-events",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        // Platform zaten 6 kez retry'lıyor; kuyruk tarafında 3 deneme yeterli.
+        "max_retries": 3,
+        "dead_letter_queue": "restomenum-plugin-events-dlq"
+      }
+    ]
+  },
+
+
   // ───────────────────────────────────────────────────────────────────────────
-  // DEPLOY: elle YAPILMAZ. GitHub'a push → Cloudflare Workers Builds derler ve yayınlar.
+  // DEPLOY: elle YAPILMAZ. GitHub'a push → Cloudflare Workers Builds yayınlar.
   // `wrangler deploy` yerelden çalıştırılmaz (CLAUDE.md §3).
   //
-  // Workers Builds ayarları (Cloudflare panelinden bir kez yapılır):
-  //   Build command   : npm run build:worker
-  //   Deploy command   : npx wrangler deploy
-  //   Root directory   : /
-  //   Node sürümü      : 22
+  // Workers Builds ayarları (panelden BİR KEZ, repo bağlanırken):
+  //   Build command  : npm run build       ← next build + Worker paketi (tek komut)
+  //   Deploy command : npx wrangler deploy  ← Cloudflare'in varsayılanı, değiştirmeye gerek yok
+  //   Root directory : /
+  //   Node sürümü    : 22
+  //
+  // `npm run build` = next build && opennextjs-cloudflare build --skipNextBuild
+  // `--skipNextBuild` ŞART: OpenNext varsayılan olarak `npm run build` çağırır; bayrak
+  // olmadan script kendini çağırır ve derleme sonsuz döngüye girer.
   //
   // Yerel doğrulama serbest:  npm run preview  ·  npx wrangler deploy --dry-run
   // ───────────────────────────────────────────────────────────────────────────
@@ -42,10 +71,14 @@
   // ⚠️ Bunlar BUILD değil RUNTIME secret'ıdır — Workers Builds ortam değişkeni olarak
   //    değil, Worker secret'ı olarak tanımlanmalı; yoksa uygulama açılışta 503 döner.
 
-  // Veritabanı seçilince birini ekle (CLAUDE.md §6 — biri seçilir, ikisi birden değil):
-  //
-  // D1:
-  // "d1_databases": [{ "binding": "DB", "database_name": "plugin", "database_id": "..." }]
-  //
-  // Neon: DATABASE_URL secret olarak verilir, binding gerekmez.
+  // Veri katmanı: D1 (CLAUDE.md §6). `wrangler dev` bunu yerelde SQLite olarak açar;
+  // uzak ortam için database_id Cloudflare'de oluşturulup buraya yazılır.
+  ,"d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "restomenum-plugin",
+      "database_id": "local-dev",
+      "migrations_dir": "drizzle"
+    }
+  ]
 }
