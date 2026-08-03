@@ -101,8 +101,8 @@ sınıfıdır**. Her sorgu, her cache anahtarı ve her log satırı tenant ile s
   id'si her satıra taşınır.
 - Dış çağrıda **timeout + sınırlı retry**; kritik akışta **idempotency ZORUNLU**
   (deterministik id + `seen_events` dedup).
-- Büyüyen tablolar (`seen_events`, olay/istek logu) budanır, PII minimum süre tutulur;
-  R2/Images'ta sahipsiz nesne bırakılmaz.
+- Büyüyen tablolar budanır (kural ve gerekçeler §6), PII minimum süre tutulur;
+  R2/Images'ta sahipsiz nesne bırakılmaz — tenant kaldırıldığında nesneleri de silinir.
 
 ### 2.7 Test ve doğrulama
 - **Yeni davranış = yeni test.** Asgari kapsam: imza (geçerli/bozuk/süresi geçmiş), dedup,
@@ -322,6 +322,24 @@ Node runtime kullanır, edge segment'ini desteklemez; yazılırsa build kırıl�
 - 🔴 **Döngü içinde tek tek sorgu (N+1) YASAK** — `inArray()` ile toplu çek, bellekte eşle.
 - Sık filtrelenen kolonlar (`tenant_id`, `event_id`, `created_at`) **index'li**; migration ile gelir.
 - Şema değişikliği = `drizzle-kit generate` + migration dosyası commit'i. Elle DDL çalıştırılmaz.
+
+**Büyüme kontrolü — yeni tablo eklerken ZORUNLU:**
+- 🔴 **Sınırsız büyüyen tablo tasarlanmaz.** Her tablonun ya doğal bir üst sınırı olur
+  (tenant başına bir satır gibi) ya da **saklama süresi + budama işi**. Üçüncü seçenek yok.
+  Olay/teslim/mesaj logları ikinci gruba girer.
+- 🔴 **Budama kodu yazmak YETMEZ — cron tetikleyicisi şart.** `wrangler.jsonc`
+  `triggers.crons` + worker'ın `scheduled` handler'ı olmadan iş hiç çalışmaz ve tablo
+  sessizce şişer. Tetikleyici, budama kodunun kendisiyle aynı commit'te gelir.
+- 🔴 **Saklama penceresi platformun retry penceresinden BELİRGİN ölçüde uzun olmalı.**
+  Dedup kaydını erken budamak, geç gelen bir retry'ı "yeni olay" yapar ve iş ikinci kez
+  çalışır — tekilleştirmenin varlık sebebini yok eder.
+- Silme **partiler halinde sınırlanır** (`LIMIT`). Tek sorguda milyonlarca satır silmek
+  D1'i uzun süre kilitler.
+- **D1 veritabanı başına sabit bir boyut üst sınırına sahiptir** (güncel değer için
+  Cloudflare limitlerine bak). Sınırsız büyüme burada maliyet değil **duvardır**:
+  sınıra çarpınca yazma tamamen durur. Neon'da sınır esnektir ama maliyet doğrusal artar.
+- Ham olay gövdesini kalıcı saklama; işine yarayan alanları çıkar. Gövdenin tamamını
+  tutmak hem şişmeyi hızlandırır hem gereksiz PII biriktirir (§2.6).
 
 ---
 
