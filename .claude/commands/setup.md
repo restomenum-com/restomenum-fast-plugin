@@ -189,12 +189,77 @@ Tek geçişte, sırayla:
 
 Sonra kullanıcıya şunları söyle:
 - Ne değiştirildi (dosya listesi)
-- Sıradaki adımlar: veritabanını oluştur (`wrangler d1 create …` gibi), migration uygula,
-  `npm run dev`, deploy için Workers Builds'i bağla
 - **Henüz gerçek tetikle denenmemiş olanlar** — dürüstçe (CLAUDE.md §2.7)
 
 Son olarak değişiklikleri commit et (§3 pathspec kuralı) — ama **push etme**: `origin`
 artık tanımlı değil ve hedef depo kullanıcının kararı.
+
+## 5. Deploy hazırlığı
+
+Yerel geliştirme `.dev.vars` ile çalışır; **deploy bunu görmez.** Aşağıdakiler yapılmadan
+yayına çıkan Worker her istekte `503 not_configured` döner ve sebebi görünmez.
+
+`AskUserQuestion` ile sor: *"Deploy hazırlığını şimdi yapalım mı?"* Hayırsa listeyi yaz ve
+`PROJECT.md`'ye "deploy hazırlığı yapılmadı" ekle.
+
+Evetse önce erişimi doğrula:
+```bash
+npx wrangler whoami
+```
+Oturum yoksa kullanıcıdan `! npx wrangler login` çalıştırmasını iste — kimlik doğrulama
+akışını SEN yürütme.
+
+### a) Bulut kaynakları — bunları sen çalıştırabilirsin
+
+```bash
+npx wrangler d1 create <slug>              # çıkan database_id'yi wrangler.jsonc'ye YAZ
+npx wrangler d1 migrations apply <slug> --remote
+npx wrangler queues create <slug>-events
+npx wrangler queues create <slug>-events-dlq
+```
+
+🔴 `database_id` şablonda `"local-dev"` yer tutucusudur — gerçek UUID ile değiştirilmeden
+deploy binding hatası verir. DLQ'yu atlama: `wrangler.jsonc` onu referans alıyor, yoksa
+kuyruk tüketicisi çözülemez.
+
+### b) Secret'lar — KULLANICI çalıştırır, sen değil
+
+Bu komutlar değeri interaktif olarak ister. 🔴 Secret değerlerini SEN girme, echo'lama,
+log'lama ya da komut satırına gömme. Kullanıcıya `!` önekiyle ver:
+
+```
+! npx wrangler secret put RESTOMENUM_CLIENT_SECRET
+! npx wrangler secret put SECRET_ENCRYPTION_KEY
+```
+
+Değerler `.dev.vars` içinde duruyor; kullanıcı oradan kopyalar.
+
+🔴 **Bunlar Worker SECRET'ıdır, build ortam değişkeni DEĞİL.** Workers Builds ayarlarına
+"environment variable" olarak girilirse Worker çalışma anında göremez → 503. Bu ayrımı
+kullanıcıya açıkça söyle; sessiz başarısızlığın en sık sebebi budur.
+
+`RESTOMENUM_PLUGIN_ID` gizli değildir, `wrangler.jsonc` `vars` içinde durur — secret yapma.
+
+### c) Workers Builds
+
+Depoyu Cloudflare panelinden bağla:
+
+| Alan | Değer |
+|---|---|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Node sürümü | 22 |
+
+Panele build komutu yazmak dışında bir şey ekleme; deploy `wrangler deploy` ile yapılır ve
+elle çalıştırılmaz (CLAUDE.md §3).
+
+### d) Doğrula
+
+İlk deploy sonrası:
+```bash
+npm run smoke -- https://<worker>.workers.dev
+```
+Kırmızıysa çoğunlukla secret'lar runtime secret'ı olarak tanımlanmamıştır.
 
 ## `PROJECT.md` şablonu
 

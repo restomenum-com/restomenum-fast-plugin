@@ -166,9 +166,22 @@ GitHub'a push → **Cloudflare Workers Builds** derler ve yayınlar. `wrangler d
 | Deploy command | `npx wrangler deploy` |
 | Node sürümü | 22 |
 
-**Secret'lar runtime secret'ı olarak tanımlanmalı** (`wrangler secret put` ya da panelden
-Variables and Secrets) — build ortam değişkeni olarak girilirse Worker onları göremez ve
-uygulama açılışta `503 not_configured` döner.
+Deploy öncesi bulut kaynakları ve secret'lar hazırlanmalı — `/setup` bu adımları yürütür,
+elle yapmak istersen:
+
+```bash
+npx wrangler d1 create <ad>          # database_id'yi wrangler.jsonc'ye yaz
+npx wrangler queues create <ad>-events
+npx wrangler queues create <ad>-events-dlq
+npx wrangler secret put RESTOMENUM_CLIENT_SECRET
+npx wrangler secret put SECRET_ENCRYPTION_KEY
+```
+
+🔴 **Bunlar Worker secret'ıdır, build ortam değişkeni DEĞİL.** Workers Builds ayarlarına
+"environment variable" olarak girilirse Worker çalışma anında göremez ve uygulama
+`503 not_configured` döner. Sessiz başarısızlığın en sık sebebi budur.
+
+`.dev.vars` yalnız yerel geliştirme içindir; deploy onu görmez.
 
 ---
 
