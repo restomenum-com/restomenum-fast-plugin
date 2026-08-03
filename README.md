@@ -34,7 +34,7 @@ burada çözülmüş ve **canlı platforma karşı doğrulanmış** durumda:
 
 ```bash
 git clone <bu-repo> benim-eklentim && cd benim-eklentim
-npm install
+npm ci        # lockfile'daki sürümleri birebir kurar
 claude
 ```
 

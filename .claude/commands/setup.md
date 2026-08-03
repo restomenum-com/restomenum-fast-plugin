@@ -7,7 +7,21 @@ description: Bu şablondan yeni bir Restomenum eklentisi türetir — amaç, ad,
 Bu depo bir **şablondur**. Görevin, kullanıcıya birkaç soru sorup şablonu onun eklentisine
 dönüştürmek. Soruları sormadan hiçbir dosyayı değiştirme.
 
-## 0. Önce durumu gör
+## 0. Ortamı hazırla
+
+**Bağımlılıklar kurulu mu?** `node_modules` yoksa hiçbir şey çalışmaz — bu komut ilerleyen
+adımlarda `npm run check` ve `drizzle-kit generate` çağırıyor.
+
+```bash
+node -v                    # 20+ olmalı (wrangler ve SDK bunu ister)
+[ -d node_modules ] || npm ci
+```
+
+`npm ci` kullan, `npm install` DEĞİL: lockfile'daki sürümleri birebir kurar, şablonun
+doğrulanmış yapılandırmasını korur. `npm ci` lockfile uyumsuzluğundan hata verirse
+kullanıcıya söyle ve `npm install` öner — ama bunun lockfile'ı değiştireceğini belirt.
+
+## 1. Önce durumu gör
 
 `PROJECT.md` VARSA bu depo zaten yapılandırılmış demektir. Kullanıcıya mevcut yapılandırmayı
 özetle ve **yeniden çalıştırmak isteyip istemediğini sor**; onay almadan üzerine yazma.
@@ -15,7 +29,7 @@ dönüştürmek. Soruları sormadan hiçbir dosyayı değiştirme.
 Ardından `git status` ile çalışma ağacına bak. Commit'lenmemiş değişiklik varsa kullanıcıyı
 uyar — bu komut dosya siler ve yeniden adlandırır, geri dönülecek bir nokta olmalı.
 
-## 1. Soruları sor
+## 2. Soruları sor
 
 Sırayla ilerle. Serbest metin gerektirenleri doğrudan sor; seçenekli olanlarda
 `AskUserQuestion` kullan.
@@ -86,7 +100,7 @@ kod bırakılmaz (CLAUDE.md §2.3).
 - **Mevcut** → `pluginId` ve `client_secret`'ı kullanıcıdan iste. Bunları **asla** koda,
   `wrangler.jsonc` dışına ya da log'a yazma.
 
-## 2. Cevapları uygula
+## 3. Cevapları uygula
 
 Tek geçişte, sırayla:
 
@@ -112,7 +126,7 @@ Tek geçişte, sırayla:
    🔴 `submit_version` ÇAĞIRMA — kalıcı durum geçişidir, kullanıcı açıkça istemeden yapılmaz.
    Webhook/connect URL'leri gerçek deploy adresi belli olmadan yazılamaz; bunu söyle.
 
-## 3. Doğrula ve raporla
+## 4. Doğrula ve raporla
 
 `npm run check` çalıştır. Kırmızıysa **düzelt**, "tamam" deme.
 
