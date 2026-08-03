@@ -48,6 +48,11 @@ Röportaj şunları sorar ve cevapları koda uygular: **amaç · ad/slug · veri
 abone olunacak olaylar · panel arayüzü gerekli mi · ücretlendirme · portal kaydı.**
 Portal kaydını MCP ile oluşturabilir, `client_secret`'ı `.dev.vars`'a yazar.
 
+Depo, Restomenum geliştirici portalının MCP sunucusunu `.mcp.json` içinde tanımlar —
+ilk kullanımda Claude onay ister, ardından kendi portal hesabınla OAuth ile bağlanırsın.
+Salt-okunur araçlar (`get_catalog`, `get_manifest`, `validate_version` …) önceden izinli;
+**scope, fiyat, manifest ya da sürüm durumunu değiştirenler her seferinde onay ister.**
+
 ### Elle
 
 <details>

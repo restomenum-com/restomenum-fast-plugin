@@ -61,3 +61,8 @@ Thumbs.db
 !CLAUDE.md
 !.claude/
 !.claude/**
+
+# …tek istisna: makineye özel izin kayıtları. Bu satır yukarıdaki `!.claude/**`
+# negasyonundan SONRA gelmek zorunda — .gitignore'da son eşleşen kural kazanır.
+# Paylaşılan ayarlar `.claude/settings.json`'da yaşar.
+.claude/settings.local.json

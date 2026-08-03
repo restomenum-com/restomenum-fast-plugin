@@ -20,6 +20,24 @@ uyar — bu komut dosya siler ve yeniden adlandırır, geri dönülecek bir nokt
 Sırayla ilerle. Serbest metin gerektirenleri doğrudan sor; seçenekli olanlarda
 `AskUserQuestion` kullan.
 
+### Önce: portal MCP bağlantısı
+
+Portal işlerine geçmeden önce MCP bağlantısının kurulu olduğunu doğrula. Sunucu
+`.mcp.json` içinde `restomenum-portal` adıyla tanımlıdır ve **OAuth 2.1 ile korunur** —
+kullanıcı kendi portal hesabıyla yetkilendirir.
+
+Bağlantıyı sınamak için `get_catalog` çağır (salt-okunur, önceden izinli):
+
+- **Çalışıyorsa** → devam et.
+- **Sunucu bağlı değilse / onay bekliyorsa** → Claude Code ilk kullanımda proje MCP
+  sunucusu için onay ister; kullanıcıya bunu onaylamasını söyle.
+- **Yetkilendirme gerekiyorsa** → OAuth akışı tarayıcıda açılır. Kullanıcıdan
+  `/mcp` komutuyla `restomenum-portal` sunucusunu seçip **Authenticate** demesini iste.
+  🔴 Kimlik doğrulama akışını SEN yürütme; kullanıcı kendi hesabıyla yetkilendirir.
+  Tamamlandığında `get_catalog`'u tekrar dene.
+- **Kullanıcı bağlanmak istemiyorsa** → portal adımlarını atla, röportajın geri kalanını
+  tamamla ve `PROJECT.md`'ye "portal kaydı yapılmadı" diye yaz.
+
 **a) Eklentinin amacı** (serbest metin)
 > Bu eklenti ne yapacak? Bir-iki cümle yeterli.
 

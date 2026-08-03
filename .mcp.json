@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "restomenum-portal": {
+      "type": "http",
+      "url": "https://restomenum-developer-portal.white-firefly-095a.workers.dev/mcp"
+    }
+  }
+}

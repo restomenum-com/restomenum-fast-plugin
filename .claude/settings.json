@@ -1,4 +1,23 @@
 {
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:dev.restomenum.com)",
+
+      "mcp__restomenum-portal__get_catalog",
+      "mcp__restomenum-portal__get_manifest",
+      "mcp__restomenum-portal__get_plugin",
+      "mcp__restomenum-portal__list_plugins",
+      "mcp__restomenum-portal__list_versions",
+      "mcp__restomenum-portal__validate_version",
+
+      "mcp__claude_ai_Dev_PORTAL__get_catalog",
+      "mcp__claude_ai_Dev_PORTAL__get_manifest",
+      "mcp__claude_ai_Dev_PORTAL__get_plugin",
+      "mcp__claude_ai_Dev_PORTAL__list_plugins",
+      "mcp__claude_ai_Dev_PORTAL__list_versions",
+      "mcp__claude_ai_Dev_PORTAL__validate_version"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {
