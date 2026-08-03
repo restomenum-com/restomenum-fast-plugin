@@ -6,6 +6,11 @@ Bu dosya eklenti kod tabanına özgü değildir; her Restomenum eklentisi için 
 kurallarını içerir. Eklentinin **amacı ve kapsamı projeden projeye değişir** — buraya yalnız
 her eklentide geçerli olan kurallar yazılır.
 
+🔴 **`PROJECT.md` yoksa bu depo henüz yapılandırılmamış bir ŞABLONDUR.**
+Kod yazmadan önce `/setup` kurulum röportajını çalıştır — ad, veri katmanı ve portal kimliği
+sorulmadan yazılan kod yer tutucu değerlerle çalışır ve ilk istekte `503 not_configured` döner.
+Kullanıcı başka bir iş isterse bunu bir cümleyle hatırlat; ısrar ederse devam et.
+
 🔴 **Her eklenti çok kiracılıdır (multi-tenant).** Her tenant'ın kendi `apiKey` / `webhookSecret` /
 ayarları vardır; bir tenant'ın verisinin diğerine sızması bu kod tabanındaki **en kritik hata
 sınıfıdır**. Her sorgu, her cache anahtarı ve her log satırı tenant ile scope'lanır.
